@@ -24,7 +24,7 @@ PICKLE_DIR = "/content/gdrive/My Drive/Public/tensorboards_shared/Training_Decod
 
 ENCODER_PICKLE_DIR = None
 # Encoder
-GDRIVE_PATH = "/content/gdrive/My Drive/Public/tensorboards_shared/Training_Encoder_X/128_NoP"
+GDRIVE_PATH = "/content/gdrive/My Drive/Public/tensorboards_shared/"
 
 # only for decoder
 TIME = 0

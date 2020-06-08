@@ -118,7 +118,9 @@ def training_loop(
             print('Start: ', start)
         else:
             print('Constructing networks...')
-            G, D, Gs = misc.load_pkl(decoder_pkl.decoder_pkl)
+            G, _, Gs = misc.load_pkl(decoder_pkl.decoder_pkl)
+            D = tflib.Network('D', num_channels=3, resolution=Gs.output_shape[3], label_size=0, func_name="training.networks_stylegan.D_basic")
+            print("Creating NEW Discriminator!!!")
             num_layers = Gs.components.synthesis.input_shape[1]
             E = tflib.Network('E', size=submit_config.image_size, filter=64, filter_max=1024, num_layers=num_layers, phase=True, **Encoder_args)
             start = 0
