@@ -40,3 +40,26 @@ ToDo:
 Later:
 * automatically create sub-dirs
 '''
+
+
+import os
+
+def getBranch():
+    branch = os.popen('git rev-parse --abbrev-ref HEAD').read()
+    return branch
+
+def getGdrivePath():
+    return os.path.join(GDRIVE_PATH, getBranch())
+
+def checkBranch():
+    branch = getBranch()
+    return branch[:4] == "run/"
+
+def makeDir():
+    path = getGdrivePath()
+    path_imgs = os.path.join(path, "images")
+    path_snapshots = os.path.join(path, "snapshots")
+    os.makedirs(path, exist_ok=True)
+    os.makedirs(path_imgs, exist_ok=True)
+    os.makedirs(path_snapshots, exist_ok=True)
+    print("Created Log-Directory {}".format(path))

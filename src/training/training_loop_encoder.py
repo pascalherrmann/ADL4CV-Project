@@ -177,7 +177,7 @@ def training_loop(
     image_batch_train = get_train_data(sess, data_dir=dataset_args.data_train, submit_config=submit_config, mode='train')
     image_batch_test = get_train_data(sess, data_dir=dataset_args.data_test, submit_config=submit_config, mode='test')
 
-    summary_log = tf.summary.FileWriter(config.GDRIVE_PATH)
+    summary_log = tf.summary.FileWriter(config.getGdrivePath())
 
     cur_nimg = start * submit_config.batch_size
     cur_tick = 0
@@ -222,7 +222,7 @@ def training_loop(
             save_image('%s/iter_%08d.png' % (submit_config.run_dir, cur_nimg), orin_recon)
 
             # save image to gdrive
-            img_path = os.path.join(config.GDRIVE_PATH, 'images', ('iter_%08d.png' % (cur_nimg)))
+            img_path = os.path.join(config.getGdrivePath(), 'images', ('iter_%08d.png' % (cur_nimg)))
             save_image(img_path, orin_recon)
 
         if cur_nimg >= tick_start_nimg + 65000:
@@ -236,7 +236,7 @@ def training_loop(
                 misc.save_pkl((E, G, D, Gs), pkl)
                 
                 # save network snapshot to gdrive
-                pkl_drive = os.path.join(config.GDRIVE_PATH, 'snapshots', 'network-snapshot-%08d.pkl' % (cur_nimg))
+                pkl_drive = os.path.join(config.getGdrivePath(), 'snapshots', 'network-snapshot-%08d.pkl' % (cur_nimg))
                 misc.save_pkl((E, G, D, Gs), pkl_drive)
 
     misc.save_pkl((E, G, D, Gs), os.path.join(submit_config.run_dir, 'network-final.pkl'))

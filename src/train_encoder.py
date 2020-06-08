@@ -44,6 +44,11 @@ batch_size_test = minibatch_per_gpu_test.get(image_size) * num_gpus
 train.max_iters = int(total_kimg * 1000 / batch_size)
 
 def main():
+    
+    if not config.checkBranch():
+        print("Returning. Invalid Branch. Switch to Run-Branch before you run training!")
+        return
+    
     kwargs = EasyDict(train)
     kwargs.update(Encoder_args=Encoder, E_opt_args=E_opt, D_opt_args=D_opt, E_loss_args=E_loss, D_loss_args=D_loss, lr_args=lr)
     kwargs.update(dataset_args=Data_dir, decoder_pkl=Decoder_pkl, tf_config=tf_config)

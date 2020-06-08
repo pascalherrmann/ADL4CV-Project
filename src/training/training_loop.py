@@ -199,7 +199,7 @@ def training_loop(
     print('Setting up run dir...')
     misc.save_image_grid(grid_reals, os.path.join(submit_config.run_dir, 'reals.png'), drange=training_set.dynamic_range, grid_size=grid_size)
     misc.save_image_grid(grid_fakes, os.path.join(submit_config.run_dir, 'fakes%06d.png' % resume_kimg), drange=drange_net, grid_size=grid_size)
-    summary_log = tf.summary.FileWriter(config.GDRIVE_PATH)
+    summary_log = tf.summary.FileWriter(config.getGdrivePath())
     if save_tf_graph:
         summary_log.add_graph(tf.get_default_graph())
     if save_weight_histograms:
@@ -259,12 +259,12 @@ def training_loop(
                 grid_fakes = Gs.run(grid_latents, grid_labels, is_validation=True, minibatch_size=sched.minibatch//submit_config.num_gpus)
                 misc.save_image_grid(grid_fakes, os.path.join(submit_config.run_dir, 'fakes%06d.png' % (cur_nimg // 1000)), drange=drange_net, grid_size=grid_size)
                 
-                misc.save_image_grid(grid_fakes, os.path.join(config.GDRIVE_PATH, 'fakes%06d.png' % (cur_nimg // 1000)), drange=drange_net, grid_size=grid_size)
+                misc.save_image_grid(grid_fakes, os.path.join(config.getGdrivePath(), 'fakes%06d.png' % (cur_nimg // 1000)), drange=drange_net, grid_size=grid_size)
             if cur_tick % network_snapshot_ticks == 0 or done or cur_tick == 1:
                 pkl = os.path.join(submit_config.run_dir, 'network-snapshot-%06d.pkl' % (cur_nimg // 1000))
                 misc.save_pkl((G, D, Gs), pkl)
                 
-                pkl_drive = os.path.join(config.GDRIVE_PATH, 'network-snapshot-%06d.pkl' % (cur_nimg // 1000))
+                pkl_drive = os.path.join(config.getGdrivePath(), 'network-snapshot-%06d.pkl' % (cur_nimg // 1000))
                 misc.save_pkl((G, D, Gs), pkl_drive)
                 
                 try:

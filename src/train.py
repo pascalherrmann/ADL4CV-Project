@@ -175,6 +175,11 @@ if 0:
 # Calls the function indicated by 'train' using the selected options.
 
 def main():
+    
+    if not config.checkBranch():
+        print("Returning. Invalid Branch. Switch to Run-Branch before you run training!")
+        return
+    
     kwargs = EasyDict(train)
     kwargs.update(G_args=G, D_args=D, G_opt_args=G_opt, D_opt_args=D_opt, G_loss_args=G_loss, D_loss_args=D_loss)
     kwargs.update(dataset_args=dataset, sched_args=sched, grid_args=grid, metric_arg_list=metrics, tf_config=tf_config)
