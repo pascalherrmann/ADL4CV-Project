@@ -48,6 +48,7 @@ def main():
     if not config.checkBranch():
         print("Returning. Invalid Branch. Switch to Run-Branch before you run training!")
         return
+    config.makeLogDir()
     
     kwargs = EasyDict(train)
     kwargs.update(Encoder_args=Encoder, E_opt_args=E_opt, D_opt_args=D_opt, E_loss_args=E_loss, D_loss_args=D_loss, lr_args=lr)
