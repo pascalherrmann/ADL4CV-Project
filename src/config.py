@@ -55,7 +55,7 @@ def checkBranch():
     branch = getBranch()
     return branch[:4] == "run/"
 
-def makeDir():
+def makeLogDir():
     path = getGdrivePath()
     path_imgs = os.path.join(path, "images")
     path_snapshots = os.path.join(path, "snapshots")
