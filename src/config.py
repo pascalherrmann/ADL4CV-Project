@@ -46,7 +46,8 @@ import os
 
 def getBranch():
     branch = os.popen('git rev-parse --abbrev-ref HEAD').read()
-    return branch
+    branch_without_line_break = branch[:-1]
+    return branch_without_line_break
 
 def getGdrivePath():
     return os.path.join(GDRIVE_PATH, getBranch())
