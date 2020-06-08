@@ -133,10 +133,10 @@ def training_loop(
     network_snapshot_ticks  = 10,       # How often to export network snapshots?
     save_tf_graph           = False,    # Include full TensorFlow computation graph in the tfevents file?
     save_weight_histograms  = False,    # Include weight histograms in the tfevents file?
-    resume_run_id           = None,     # Run ID or network pkl to resume training from, None = start from scratch.
+    resume_run_id           = config.PICKLE_DIR,     # Run ID or network pkl to resume training from, None = start from scratch.
     resume_snapshot         = None,     # Snapshot index to resume training from, None = autodetect.
-    resume_kimg             = 0.0,      # Assumed training progress at the beginning. Affects reporting and training schedule.
-    resume_time             = 0.0):     # Assumed wallclock time at the beginning. Affects reporting.
+    resume_kimg             = config.KIMG,      # Assumed training progress at the beginning. Affects reporting and training schedule.
+    resume_time             = config.TIME):     # Assumed wallclock time at the beginning. Affects reporting.
 
     # Initialize dnnlib and TensorFlow.
     ctx = dnnlib.RunContext(submit_config, train)
@@ -199,7 +199,7 @@ def training_loop(
     print('Setting up run dir...')
     misc.save_image_grid(grid_reals, os.path.join(submit_config.run_dir, 'reals.png'), drange=training_set.dynamic_range, grid_size=grid_size)
     misc.save_image_grid(grid_fakes, os.path.join(submit_config.run_dir, 'fakes%06d.png' % resume_kimg), drange=drange_net, grid_size=grid_size)
-    summary_log = tf.summary.FileWriter(submit_config.run_dir)
+    summary_log = tf.summary.FileWriter(config.GDRIVE_PATH)
     if save_tf_graph:
         summary_log.add_graph(tf.get_default_graph())
     if save_weight_histograms:
@@ -258,10 +258,19 @@ def training_loop(
             if cur_tick % image_snapshot_ticks == 0 or done:
                 grid_fakes = Gs.run(grid_latents, grid_labels, is_validation=True, minibatch_size=sched.minibatch//submit_config.num_gpus)
                 misc.save_image_grid(grid_fakes, os.path.join(submit_config.run_dir, 'fakes%06d.png' % (cur_nimg // 1000)), drange=drange_net, grid_size=grid_size)
+                
+                misc.save_image_grid(grid_fakes, os.path.join(config.GDRIVE_PATH, 'fakes%06d.png' % (cur_nimg // 1000)), drange=drange_net, grid_size=grid_size)
             if cur_tick % network_snapshot_ticks == 0 or done or cur_tick == 1:
                 pkl = os.path.join(submit_config.run_dir, 'network-snapshot-%06d.pkl' % (cur_nimg // 1000))
                 misc.save_pkl((G, D, Gs), pkl)
-                metrics.run(pkl, run_dir=submit_config.run_dir, num_gpus=submit_config.num_gpus, tf_config=tf_config)
+                
+                pkl_drive = os.path.join(config.GDRIVE_PATH, 'network-snapshot-%06d.pkl' % (cur_nimg // 1000))
+                misc.save_pkl((G, D, Gs), pkl_drive)
+                
+                try:
+                    metrics.run(pkl, run_dir=submit_config.run_dir, num_gpus=submit_config.num_gpus, tf_config=tf_config)
+                except:
+                    print("Error while initializing.")
 
             # Update summaries and RunContext.
             metrics.update_autosummaries()

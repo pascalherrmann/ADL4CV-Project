@@ -15,6 +15,7 @@ from utils.visualizer import fuse_images
 from utils.visualizer import save_image
 from utils.visualizer import adjust_pixel_range
 
+import config
 
 def process_reals(x, mirror_augment, drange_data, drange_net):
     with tf.name_scope('ProcessReals'):
@@ -95,10 +96,10 @@ def training_loop(
                   drange_data             = [0, 255],
                   drange_net              = [-1,1],   # Dynamic range used when feeding image data to the networks.
                   mirror_augment          = False,
-                  resume_run_id           = None,     # Run ID or network pkl to resume training from, None = start from scratch.
+                  resume_run_id           = config.ENCODER_PICKLE_DIR,     # Run ID or network pkl to resume training from, None = start from scratch.
                   resume_snapshot         = None,     # Snapshot index to resume training from, None = autodetect.
                   image_snapshot_ticks    = 1,        # How often to export image snapshots?
-                  network_snapshot_ticks  = 5,       # How often to export network snapshots?
+                  network_snapshot_ticks  = 4,       # How often to export network snapshots?
                   max_iters               = 150000):
 
     tflib.init_tf(tf_config)
@@ -176,14 +177,22 @@ def training_loop(
     image_batch_train = get_train_data(sess, data_dir=dataset_args.data_train, submit_config=submit_config, mode='train')
     image_batch_test = get_train_data(sess, data_dir=dataset_args.data_test, submit_config=submit_config, mode='test')
 
-    summary_log = tf.summary.FileWriter(submit_config.run_dir)
+    summary_log = tf.summary.FileWriter(config.GDRIVE_PATH)
 
     cur_nimg = start * submit_config.batch_size
     cur_tick = 0
     tick_start_nimg = cur_nimg
     start_time = time.time()
 
+    init_fix = tf.initialize_variables(
+        [global_step0],
+        name='init_fix'
+    )
+    sess.run(init_fix)
+    
     print('Optimization starts!!!')
+    
+    
     for it in range(start, max_iters):
 
         batch_images = sess.run(image_batch_train)
@@ -198,24 +207,37 @@ def training_loop(
                 it, recon_, adv_, d_r_, d_f_, d_g_, dnnlib.util.format_time(time.time() - start_time)))
             sys.stdout.flush()
             tflib.autosummary.save_summaries(summary_log, it)
+            
+            
+            
+            
+        if it % 500 == 0:
+            batch_images_test = sess.run(image_batch_test)
+            batch_images_test = misc.adjust_dynamic_range(batch_images_test.astype(np.float32), [0, 255], [-1., 1.])
+            samples2 = sess.run(fake_X_val, feed_dict={real_test: batch_images_test})
+            orin_recon = np.concatenate([batch_images_test, samples2], axis=0)
+            orin_recon = adjust_pixel_range(orin_recon)
+            orin_recon = fuse_images(orin_recon, row=2, col=submit_config.batch_size_test)
+            # save image results during training, first row is original images and the second row is reconstructed images
+            save_image('%s/iter_%08d.png' % (submit_config.run_dir, cur_nimg), orin_recon)
+
+            # save image to gdrive
+            img_path = os.path.join(config.GDRIVE_PATH, 'images', ('iter_%08d.png' % (cur_nimg)))
+            save_image(img_path, orin_recon)
 
         if cur_nimg >= tick_start_nimg + 65000:
             cur_tick += 1
             tick_start_nimg = cur_nimg
 
-            if cur_tick % image_snapshot_ticks == 0:
-                batch_images_test = sess.run(image_batch_test)
-                batch_images_test = misc.adjust_dynamic_range(batch_images_test.astype(np.float32), [0, 255], [-1., 1.])
-                samples2 = sess.run(fake_X_val, feed_dict={real_test: batch_images_test})
-                orin_recon = np.concatenate([batch_images_test, samples2], axis=0)
-                orin_recon = adjust_pixel_range(orin_recon)
-                orin_recon = fuse_images(orin_recon, row=2, col=submit_config.batch_size_test)
-                # save image results during training, first row is original images and the second row is reconstructed images
-                save_image('%s/iter_%08d.png' % (submit_config.run_dir, cur_nimg), orin_recon)
+
 
             if cur_tick % network_snapshot_ticks == 0:
                 pkl = os.path.join(submit_config.run_dir, 'network-snapshot-%08d.pkl' % (cur_nimg))
                 misc.save_pkl((E, G, D, Gs), pkl)
+                
+                # save network snapshot to gdrive
+                pkl_drive = os.path.join(config.GDRIVE_PATH, 'snapshots', 'network-snapshot-%08d.pkl' % (cur_nimg))
+                misc.save_pkl((E, G, D, Gs), pkl_drive)
 
     misc.save_pkl((E, G, D, Gs), os.path.join(submit_config.run_dir, 'network-final.pkl'))
     summary_log.close()

@@ -5,7 +5,7 @@ import config
 import copy
 
 
-desc            = 'stylegan-encoder'
+desc            = 'stylegan-encoder' + config.DESC
 train           = EasyDict(run_func_name='training.training_loop_encoder.training_loop')
 Encoder         = EasyDict(func_name='training.networks_encoder.Encoder')
 E_opt           = EasyDict(beta1=0.9, beta2=0.99, epsilon=1e-8)
@@ -13,18 +13,18 @@ D_opt           = EasyDict(beta1=0.9, beta2=0.99, epsilon=1e-8)
 E_loss          = EasyDict(func_name='training.loss_encoder.E_loss', feature_scale=0.00005, D_scale=0.05, perceptual_img_size=256)
 D_loss          = EasyDict(func_name='training.loss_encoder.D_logistic_simplegp', r1_gamma=10.0)
 lr              = EasyDict(learning_rate=0.0001, decay_step=30000, decay_rate=0.8, stair=False)
-Data_dir        = EasyDict(data_train='', data_test='')
-Decoder_pkl     = EasyDict(decoder_pkl='')
+Data_dir        = EasyDict(data_train=config.DATA_DIR, data_test=config.DATA_DIR)
+Decoder_pkl     = EasyDict(decoder_pkl=config.PICKLE_DIR)
 tf_config       = {'rnd.np_random_seed': 1000}
 submit_config   = dnnlib.SubmitConfig()
 
-# num_gpus = 1; desc += '-1gpu'
+num_gpus = 1; desc += '-1gpu'
 # num_gpus = 2; desc += '-2gpu'
 # num_gpus = 4; desc += '-4gpu'
-num_gpus = 8; desc += '-8gpu'
+#num_gpus = 8; desc += '-8gpu'
 
-# image_size = 128;  desc += '-128x128';   total_kimg = 12000
-image_size = 256;  desc += '-256x256';   total_kimg = 14000
+image_size = config.RESOLUTION;  desc += "-{}x{}".format(config.RESOLUTION,config.RESOLUTION);   total_kimg = 12000
+#image_size = 256;  desc += '-256x256';   total_kimg = 14000
 # image_size = 512;  desc += '-512x512';   total_kimg = 16000
 # image_size = 1024; desc += '-1024x1024'; total_kimg = 18000
 
@@ -35,8 +35,8 @@ dataset = 'ffhq';           desc += '-ffhq';             train.mirror_augment = 
 
 z_dim = 512
 
-minibatch_per_gpu_train = {128: 16, 256: 16, 512: 8, 1024: 4}
-minibatch_per_gpu_test  = {128: 1, 256: 1, 512: 1, 1024: 1}
+minibatch_per_gpu_train = {64: 32, 128: 16, 256: 16, 512: 8, 1024: 4}
+minibatch_per_gpu_test  = {64: 1, 128: 1, 256: 1, 512: 1, 1024: 1}
 
 assert image_size in minibatch_per_gpu_train, 'Invalid image size'
 batch_size = minibatch_per_gpu_train.get(image_size) * num_gpus
