@@ -420,15 +420,19 @@ def G_mapping(
     # Mapping layers.
     for layer_idx in range(mapping_layers):
         with tf.variable_scope('Dense%d' % layer_idx):
-            fmaps = dlatent_size if layer_idx == mapping_layers - 1 else mapping_fmaps
+            fmaps = dlatent_size * dlatent_broadcast if layer_idx == mapping_layers - 1 else mapping_fmaps
             x = dense(x, fmaps=fmaps, gain=gain, use_wscale=use_wscale, lrmul=mapping_lrmul)
             x = apply_bias(x, lrmul=mapping_lrmul)
             x = act(x)
 
     # Broadcast.
+    # if dlatent_broadcast is not None:
+    #     with tf.variable_scope('Broadcast'):
+    #         x = tf.tile(x[:, np.newaxis], [1, dlatent_broadcast, 1])
+
     if dlatent_broadcast is not None:
-        with tf.variable_scope('Broadcast'):
-            x = tf.tile(x[:, np.newaxis], [1, dlatent_broadcast, 1])
+        with tf.variable_scope('Reshape'):
+            x = tf.reshape(x, shape=[-1, dlatent_broadcast, latent_size])
 
     # Output.
     assert x.dtype == tf.as_dtype(dtype)
