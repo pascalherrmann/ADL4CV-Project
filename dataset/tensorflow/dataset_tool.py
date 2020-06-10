@@ -553,8 +553,9 @@ def create_from_images(tfrecord_dir, image_dir, shuffle):
             
 def create_from_image_pair(tfrecord_dir, image1_dir, image2_dir, shuffle):
     print('Loading images from "%s"' % image1_dir) #TODO Add second dir to message
-    image1_filenames = sorted(glob.glob(os.path.join(image1_dir, '*')))
-    image2_filenames = sorted(glob.glob(os.path.join(image2_dir, '*')))
+    import pathlib
+    image1_filenames = sorted(pathlib.Path(image1_dir).rglob("*.png"))
+    image2_filenames = sorted(pathlib.Path(image2_dir).rglob("*.png"))
     if len(image1_filenames) == 0:
         error('No input images found')
 
