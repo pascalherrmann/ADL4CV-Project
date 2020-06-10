@@ -3,7 +3,7 @@
 import os
 import glob
 import numpy as np
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
 import dnnlib
 #import dnnlib.tflib as tflib
 
@@ -17,7 +17,10 @@ def parse_tfrecord_tf(record):
         'landmark': tf.FixedLenFeature([], tf.string)})
     portrait = tf.decode_raw(features['portrait'], tf.uint8)
     landmark = tf.decode_raw(features['landmark'], tf.uint8)
-    return (tf.reshape(portrait, features['shape']), tf.reshape(landmark, features['shape']))
+    portrait = tf.reshape(portrait, (1, features['shape'][0], features['shape'][1], features['shape'][2]))
+    landmark = tf.reshape(landmark, (1, features['shape'][0], features['shape'][1], features['shape'][2]))
+    data = tf.concat((portrait, landmark), axis=0)
+    return data#tf.reshape(portrait, features['shape']), tf.reshape(landmark, features['shape']))
 
 def parse_tfrecord_np(record):
     ex = tf.train.Example()
@@ -25,7 +28,10 @@ def parse_tfrecord_np(record):
     shape = ex.features.feature['shape'].int64_list.value # temporary pylint workaround # pylint: disable=no-member
     portrait = ex.features.feature['portrait'].bytes_list.value[0] # temporary pylint workaround # pylint: disable=no-member
     landmark = ex.features.feature['landmark'].bytes_list.value[0] # temporary pylint workaround # pylint: disable=no-member
-    return (np.fromstring(portrait, np.uint8).reshape(shape), np.fromstring(landmark, np.uint8).reshape(shape))
+    portrait = np.fromstring(portrait, np.uint8).reshape(1, shape[0], shape[1], shape[1])
+    landmark = np.fromstring(landmark, np.uint8).reshape(1, shape[0], shape[1], shape[1])
+    data = np.concatenate((portrait, landmark), axis=0) 
+    return data#np.fromstring(portrait, np.uint8).reshape(shape), np.fromstring(landmark, np.uint8).reshape(shape))
 
 #----------------------------------------------------------------------------
 # Dataset class that loads data from tfrecords files.
@@ -72,7 +78,6 @@ class TFRecordDataset:
             for record in tf.python_io.tf_record_iterator(tfr_file, tfr_opt):
                 tfr_shapes.append(parse_tfrecord_np(record).shape)
                 break
-
         # Autodetect label filename.
         if self.label_file is None:
             guess = sorted(glob.glob(os.path.join(self.tfrecord_dir, '*.labels')))
@@ -87,11 +92,12 @@ class TFRecordDataset:
         max_shape = max(tfr_shapes, key=np.prod)
         self.resolution = resolution if resolution is not None else max_shape[1]
         self.resolution_log2 = int(np.log2(self.resolution))
-        self.shape = [max_shape[0], self.resolution, self.resolution]
-        tfr_lods = [self.resolution_log2 - int(np.log2(shape[1])) for shape in tfr_shapes]
-        assert all(shape[0] == max_shape[0] for shape in tfr_shapes)
-        assert all(shape[1] == shape[2] for shape in tfr_shapes)
-        assert all(shape[1] == self.resolution // (2**lod) for shape, lod in zip(tfr_shapes, tfr_lods))
+        print(max_shape)
+        self.shape = [max_shape[1], self.resolution, self.resolution]
+        tfr_lods = [0]#[self.resolution_log2 - int(np.log2(shape[1])) for shape in tfr_shapes]
+        assert all(shape[1] == max_shape[1] for shape in tfr_shapes)
+        assert all(shape[2] == shape[3] for shape in tfr_shapes)
+        assert all(shape[2] == self.resolution // (2**lod) for shape, lod in zip(tfr_shapes, tfr_lods))
         assert all(lod in tfr_lods for lod in range(self.resolution_log2 - 1))
 
         # Load labels.

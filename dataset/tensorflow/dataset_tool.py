@@ -91,7 +91,7 @@ class TFRecordExporter:
             assert self.shape[1] == self.shape[2]
             assert self.shape[1] == 2**self.resolution_log2
             tfr_opt = tf.io.TFRecordOptions(compression_type='')
-            for lod in range(self.resolution_log2 - 1):
+            for lod in range(1):# self.resolution_log2 - 1):
                 tfr_file = self.tfr_prefix + '-r%02d.tfrecords' % (self.resolution_log2 - lod)
                 self.tfr_writers.append(tf.io.TFRecordWriter(tfr_file, tfr_opt))
         assert img1.shape == self.shape
@@ -558,10 +558,11 @@ def create_from_image_pair(tfrecord_dir, image1_dir, image2_dir, shuffle):
     if len(image1_filenames) == 0:
         error('No input images found')
 
-    img1 = np.asarray(PIL.Image.open(image1_filenames[0]))
-    img2 = np.asarray(PIL.Image.open(image2_filenames[0]))
+    img1 = np.asarray(PIL.Image.open(image1_filenames[0]).convert('RGB'))
+    img2 = np.asarray(PIL.Image.open(image2_filenames[0]).convert('RGB'))
     resolution = img1.shape[0]
     channels = img1.shape[2] if img1.ndim == 3 else 1
+    
     if img1.shape[1] != resolution:
         error('Input images must have the same width and height')
     if resolution != 2 ** int(np.floor(np.log2(resolution))):
@@ -572,8 +573,8 @@ def create_from_image_pair(tfrecord_dir, image1_dir, image2_dir, shuffle):
     with TFRecordExporter(tfrecord_dir, len(image1_filenames)) as tfr:
         order = tfr.choose_shuffled_order() if shuffle else np.arange(len(image1_filenames))
         for idx in range(order.size):
-            img1 = np.asarray(PIL.Image.open(image1_filenames[order[idx]]))
-            img2 = np.asarray(PIL.Image.open(image2_filenames[order[idx]]))
+            img1 = np.asarray(PIL.Image.open(image1_filenames[order[idx]]).convert('RGB'))
+            img2 = np.asarray(PIL.Image.open(image2_filenames[order[idx]]).convert('RGB'))
             if channels == 1:
                 img1 = img1[np.newaxis, :, :] # HW => CHW
                 img2 = img2[np.newaxis, :, :] # HW => CHW
