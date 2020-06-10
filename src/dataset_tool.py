@@ -87,6 +87,36 @@ class TFRecordExporter:
                 'data': tf.train.Feature(bytes_list=tf.train.BytesList(value=[quant.tostring()]))}))
             tfr_writer.write(ex.SerializeToString())
         self.cur_images += 1
+        
+    def add_image_pair(self, img1, img2):
+        if self.print_progress and self.cur_images % self.progress_interval == 0:
+            print('%d / %d\r' % (self.cur_images, self.expected_images), end='', flush=True)
+        if self.shape is None:
+            self.shape = img1.shape
+            self.resolution_log2 = int(np.log2(self.shape[1]))
+            assert self.shape[0] in [1, 3]
+            assert self.shape[1] == self.shape[2]
+            assert self.shape[1] == 2**self.resolution_log2
+            tfr_opt = tf.io.TFRecordOptions(compression_type='')
+            for lod in range(1):# self.resolution_log2 - 1): //only full 128px stored
+                tfr_file = self.tfr_prefix + '-r%02d.tfrecords' % (self.resolution_log2 - lod)
+                self.tfr_writers.append(tf.io.TFRecordWriter(tfr_file, tfr_opt))
+        assert img1.shape == self.shape
+        for lod, tfr_writer in enumerate(self.tfr_writers):
+            if lod:
+                img1 = img1.astype(np.float32)
+                img1 = (img1[:, 0::2, 0::2] + img1[:, 0::2, 1::2] + img1[:, 1::2, 0::2] + img1[:, 1::2, 1::2]) * 0.25
+                
+                img2 = img2.astype(np.float32)
+                img2 = (img2[:, 0::2, 0::2] + img2[:, 0::2, 1::2] + img2[:, 1::2, 0::2] + img2[:, 1::2, 1::2]) * 0.25
+            quant1 = np.rint(img1).clip(0, 255).astype(np.uint8)
+            quant2 = np.rint(img2).clip(0, 255).astype(np.uint8)
+            ex = tf.train.Example(features=tf.train.Features(feature={
+                'shape': tf.train.Feature(int64_list=tf.train.Int64List(value=quant1.shape)),
+                'portrait': tf.train.Feature(bytes_list=tf.train.BytesList(value=[quant1.tostring()])),
+                'landmark': tf.train.Feature(bytes_list=tf.train.BytesList(value=[quant2.tostring()]))}))
+            tfr_writer.write(ex.SerializeToString())
+        self.cur_images += 1
 
     def add_labels(self, labels):
         if self.print_progress:
@@ -525,6 +555,41 @@ def create_from_images(tfrecord_dir, image_dir, shuffle):
             else:
                 img = img.transpose([2, 0, 1]) # HWC => CHW
             tfr.add_image(img)
+            
+#----------------------------------------------------------------------------
+            
+def create_from_image_pair(tfrecord_dir, image1_dir, image2_dir, shuffle):
+    print('Loading images from "%s"' % image1_dir) #TODO Add second dir to message
+    import pathlib
+    image1_filenames = sorted(pathlib.Path(image1_dir).rglob("*.png"))
+    image2_filenames = sorted(pathlib.Path(image2_dir).rglob("*.png"))
+    if len(image1_filenames) == 0:
+        error('No input images found')
+
+    img1 = np.asarray(PIL.Image.open(image1_filenames[0]).convert('RGB'))
+    img2 = np.asarray(PIL.Image.open(image2_filenames[0]).convert('RGB'))
+    resolution = img1.shape[0]
+    channels = img1.shape[2] if img1.ndim == 3 else 1
+    
+    if img1.shape[1] != resolution:
+        error('Input images must have the same width and height')
+    if resolution != 2 ** int(np.floor(np.log2(resolution))):
+        error('Input image resolution must be a power-of-two')
+    if channels not in [1, 3]:
+        error('Input images must be stored as RGB or grayscale')
+
+    with TFRecordExporter(tfrecord_dir, len(image1_filenames)) as tfr:
+        order = tfr.choose_shuffled_order() if shuffle else np.arange(len(image1_filenames))
+        for idx in range(order.size):
+            img1 = np.asarray(PIL.Image.open(image1_filenames[order[idx]]).convert('RGB'))
+            img2 = np.asarray(PIL.Image.open(image2_filenames[order[idx]]).convert('RGB'))
+            if channels == 1:
+                img1 = img1[np.newaxis, :, :] # HW => CHW
+                img2 = img2[np.newaxis, :, :] # HW => CHW
+            else:
+                img1 = img1.transpose([2, 0, 1]) # HWC => CHW
+                img2 = img2.transpose([2, 0, 1]) # HWC => CHW
+            tfr.add_image_pair(img1, img2)
 
 #----------------------------------------------------------------------------
 

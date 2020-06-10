@@ -8,7 +8,7 @@ import dnnlib
 #import dnnlib.tflib as tflib
 
 #----------------------------------------------------------------------------
-# Parse individual image from a tfrecords file.
+# Parse individual pair of images image from a tfrecords file.
 
 def parse_tfrecord_tf(record):
     features = tf.parse_single_example(record, features={
@@ -20,7 +20,7 @@ def parse_tfrecord_tf(record):
     portrait = tf.reshape(portrait, (1, features['shape'][0], features['shape'][1], features['shape'][2]))
     landmark = tf.reshape(landmark, (1, features['shape'][0], features['shape'][1], features['shape'][2]))
     data = tf.concat((portrait, landmark), axis=0)
-    return data#tf.reshape(portrait, features['shape']), tf.reshape(landmark, features['shape']))
+    return data
 
 def parse_tfrecord_np(record):
     ex = tf.train.Example()
@@ -31,7 +31,7 @@ def parse_tfrecord_np(record):
     portrait = np.fromstring(portrait, np.uint8).reshape(1, shape[0], shape[1], shape[1])
     landmark = np.fromstring(landmark, np.uint8).reshape(1, shape[0], shape[1], shape[1])
     data = np.concatenate((portrait, landmark), axis=0) 
-    return data#np.fromstring(portrait, np.uint8).reshape(shape), np.fromstring(landmark, np.uint8).reshape(shape))
+    return data
 
 #----------------------------------------------------------------------------
 # Dataset class that loads data from tfrecords files.
