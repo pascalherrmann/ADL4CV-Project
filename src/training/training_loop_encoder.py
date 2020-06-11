@@ -56,7 +56,12 @@ def get_train_data(sess, data_dir, submit_config, mode):
     else:
         raise Exception("mode must in ['train', 'test'], but got {}" % mode)
 
-    dset = tf.data.TFRecordDataset(data_dir)
+    #get list of all tfrecord files in the dataset folder
+    records_path_list = os.listdir(path=data_dir)
+    for i in range(len(records_path_list)):
+      records_path_list[i] = os.path.join(data_dir, records_path_list[i])
+
+    dset = tf.data.TFRecordDataset(records_path_list)
     dset = dset.map(parse_tfrecord_tf, num_parallel_calls=16)
 
     if shuffle:
