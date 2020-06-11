@@ -167,6 +167,18 @@ def conv2d(x, fmaps, kernel, **kwargs):
     w = tf.cast(w, x.dtype)
     return tf.nn.conv2d(x, w, strides=[1,1,1,1], padding='SAME', data_format='NCHW')
 
+# new: 2x2 strides, 4x4 conv
+def discrim_conv(x, fmaps, stride, **kwargs):
+    assert kernel >= 1 and kernel % 2 == 1
+    w = get_weight([4, 4, x.shape[1].value, fmaps], **kwargs)
+    w = tf.cast(w, x.dtype)
+    return tf.nn.conv2d(x, w, strides=(stride,stride) padding='SAME', data_format='NCHW')
+
+def batchnorm(inputs):
+    return tf.layers.batch_normalization(inputs, axis=3, epsilon=1e-5, momentum=0.1, training=True, gamma_initializer=tf.random_normal_initializer(1.0, 0.02))
+
+
+
 #----------------------------------------------------------------------------
 # Fused convolution + scaling.
 # Faster and uses less memory than performing the operations separately.
@@ -617,33 +629,30 @@ def D_basic(
     # fromrgb: layer that takes 3 channel-image as input, i.e., 1st layer in discriminator
     # changes with progressive growing
     #
-    def fromrgb(x, res): # res = 2..resolution_log2
-        with tf.variable_scope('FromRGB_lod%d' % (resolution_log2 - res)):
-            # input feature maps automatisch (hier. 6 statt 3). output featue maps werden agnegeben
-            return act(apply_bias(conv2d(x, fmaps=nf(res-1), kernel=1, gain=gain, use_wscale=use_wscale)))
-    def block(x, res): # res = 2..resolution_log2
-        with tf.variable_scope('%dx%d' % (2**res, 2**res)):
-            if res >= 3: # 8x8 and up
-                with tf.variable_scope('Conv0'):
-                    x = act(apply_bias(conv2d(x, fmaps=nf(res-1), kernel=3, gain=gain, use_wscale=use_wscale)))
-                with tf.variable_scope('Conv1_down'):
-                    x = act(apply_bias(conv2d_downscale2d(blur(x), fmaps=nf(res-2), kernel=3, gain=gain, use_wscale=use_wscale, fused_scale=fused_scale)))
-            else: # 4x4 i.e. res = 2
-                if mbstd_group_size > 1:
-                    x = minibatch_stddev_layer(x, mbstd_group_size, mbstd_num_features)
-                with tf.variable_scope('Conv'):
-                    x = act(apply_bias(conv2d(x, fmaps=nf(res-1), kernel=3, gain=gain, use_wscale=use_wscale)))
-                with tf.variable_scope('Dense0'):
-                    x = act(apply_bias(dense(x, fmaps=nf(res-2), gain=gain, use_wscale=use_wscale)))
-                with tf.variable_scope('Dense1'):
-                    x = apply_bias(dense(x, fmaps=max(label_size, 1), gain=1, use_wscale=use_wscale))
-            return x
 
-    # Fixed structure: simple and efficient, but does not support progressive growing.
-    x = fromrgb(d_input, resolution_log2)
-    for res in range(resolution_log2, 2, -1):
-        x = block(x, res)
-    scores_out = block(x, 2) # adds dense layers.
+    ### final
+    n_layers = 3
+    layers = []
+
+    # layer_1: [batch, 256, 256, in_channels * 2] => [batch, 128, 128, ndf]
+    with tf.variable_scope("layer_1"):
+        convolved = act(apply_bias(discrim_conv(d_input, 64, gain=gain, use_wscale=use_wscale, stride=stride)))
+        layers.append(convolved)
+
+    for i in range(n_layers):
+        with tf.variable_scope("layer_%d" % (len(layers) + 1)):
+                out_channels = 64 * min(2**(i+1), 8)
+                stride = 1 if i == n_layers - 1 else 2  # last layer here has stride 1
+                convolved = apply_bias(discrim_conv(layers[-1], out_channels, stride=stride))
+                normalized = batchnorm(convolved)
+                rectified = act(normalized)
+                layers.append(rectified)
+
+    with tf.variable_scope("layer_%d" % (len(layers) + 1)):
+        convolved = discrim_conv(rectified, out_channels=1, stride=1)
+        scores_out = tf.sigmoid(convolved)
+        layers.append(output)
+        ####
 
     if label_size:
         print("LABEL_SIZE=",label_size)
