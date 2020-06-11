@@ -136,7 +136,7 @@ def training_loop(
             print('Start: ', start)
         else:
             print('Constructing networks...')
-            G, _, Gs = misc.load_pkl(decoder_pkl.decoder_pkl)
+            G, D_pretrained, Gs = misc.load_pkl(decoder_pkl.decoder_pkl)
 
             # Creating New Discriminator
             # as subclass of tflib.Network
@@ -165,6 +165,8 @@ def training_loop(
 
     E_loss_rec = 0.
     E_loss_adv = 0.
+    E_loss_adv_pretrained = 0
+
     D_loss_real = 0.
     D_loss_fake = 0.
     D_loss_grad = 0.
@@ -174,6 +176,7 @@ def training_loop(
             E_gpu = E if gpu == 0 else E.clone(E.name + '_shadow')
             D_gpu = D if gpu == 0 else D.clone(D.name + '_shadow')
             G_gpu = Gs if gpu == 0 else Gs.clone(Gs.name + '_shadow')
+            D_pretrained_gpu = D_pretrained if gpu == 0 else D_pretrained.clone(D_pretrained.name + '_shadow')
             perceptual_model = PerceptualModel(img_size=[E_loss_args.perceptual_img_size, E_loss_args.perceptual_img_size], multi_layers=False)
             real_gpu = process_reals(real_split[gpu], mirror_augment, drange_data, drange_net)
 
@@ -184,7 +187,7 @@ def training_loop(
                 #
                 # get loss for encoder
                 #
-                E_loss, recon_loss, adv_loss = dnnlib.util.call_func_by_name(E=E_gpu, G=G_gpu, D=D_gpu, perceptual_model=perceptual_model, reals=real_gpu,real_landmarks=landmarks_gpu, **E_loss_args) #call loss function (loss_enocder)
+                E_loss, recon_loss, adv_loss, adv_pretrained_loss = dnnlib.util.call_func_by_name(E=E_gpu, G=G_gpu, D=D_gpu, D_pretrained=D_pretrained_gpu, perceptual_model=perceptual_model, reals=real_gpu,real_landmarks=landmarks_gpu, **E_loss_args) #call E_loss function (loss_enocder)
                 
                 
                 #
@@ -192,7 +195,7 @@ def training_loop(
                 #
                 #E_loss_rec += recon_loss
                 
-
+                E_loss_adv_pretrained += adv_pretrained_loss
                 E_loss_adv += adv_loss
             with tf.name_scope('D_loss'), tf.control_dependencies(None):
                 #
@@ -208,6 +211,7 @@ def training_loop(
 
     E_loss_rec /= submit_config.num_gpus
     E_loss_adv /= submit_config.num_gpus
+    E_loss_adv_pretrained /= submit_config.num_gpus
     D_loss_real /= submit_config.num_gpus
     D_loss_fake /= submit_config.num_gpus
     D_loss_grad /= submit_config.num_gpus
@@ -252,20 +256,20 @@ def training_loop(
         feed_dict_1 = {real_train: portrait_images, real_landmarks_train: landmark_images} # todo: feed dict ändern.
         
         #print("portrait_images", portrait_images.shape)
-        #print("landmark_images", landmark_images.shape)
+        #print("landmark_iusmages", landmark_images.shape)
         #print("E_train_op", E_train_op)
         #print("E_loss_rec", E_loss_rec)
         #print("E_loss_adv",E_loss_adv)
         
         # don't use E_loss_rec
-        _, adv_ = sess.run([E_train_op, E_loss_adv], feed_dict_1) #todo: feed_dict ändern
+        _, adv_, adv_pretrained_ = sess.run([E_train_op, E_loss_adv, E_loss_adv_pretrained], feed_dict_1) #todo: feed_dict ändern
         _, d_r_, d_f_, d_g_ = sess.run([D_train_op, D_loss_real, D_loss_fake, D_loss_grad], feed_dict_1)
 
         cur_nimg += submit_config.batch_size
 
         if it % 50 == 0:
-            print('Iter: %06d recon_loss: %-6.4f adv_loss: %-6.4f d_r_loss: %-6.4f d_f_loss: %-6.4f d_reg: %-6.4f time:%-12s' % (
-                it, -1, adv_, d_r_, d_f_, d_g_, dnnlib.util.format_time(time.time() - start_time)))
+            print('Iter: %06d recon_loss: %-6.4f adv_loss: %-6.4f adv_loss_pret: %-6.4f d_r_loss: %-6.4f d_f_loss: %-6.4f d_reg: %-6.4f time:%-12s' % (
+                it, -1, adv_, adv_pretrained_, d_r_, d_f_, d_g_, dnnlib.util.format_time(time.time() - start_time)))
             sys.stdout.flush()
             tflib.autosummary.save_summaries(summary_log, it)
             
@@ -285,7 +289,7 @@ def training_loop(
 
 
             samples2 = sess.run(fake_X_val, feed_dict={real_test: portrait_images_test, real_landmarks_test: landmark_images_test})
-            orin_recon = np.concatenate([landmark_images_test, samples2], axis=0) # bild: oben input, unten: reconstruct
+            orin_recon = np.concatenate([portrait_images_test, landmark_images_test, samples2], axis=0) # bild: oben input, unten: reconstruct
             orin_recon = adjust_pixel_range(orin_recon)
             orin_recon = fuse_images(orin_recon, row=2, col=submit_config.batch_size_test)
             # save image results during training, first row is original images and the second row is reconstructed images

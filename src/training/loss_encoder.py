@@ -17,7 +17,7 @@ def fp32(*values):
 
 #----------------------------------------------------------------------------
 # Encoder loss function: takes img -> loss: recon (px + ft) + adv (discriminator for fakes)
-def E_loss(E, G, D, perceptual_model, reals, real_landmarks, feature_scale=0.00005, D_scale=0.1, perceptual_img_size=256):
+def E_loss(E, G, D, D_pretrained, perceptual_model, reals, real_landmarks, feature_scale=0.00005, D_scale=0.1, perceptual_img_size=256):
 
     # get dimensions of latent space w (512*12)
     num_layers, latent_dim = G.components.synthesis.input_shape[1:3]
@@ -34,14 +34,21 @@ def E_loss(E, G, D, perceptual_model, reals, real_landmarks, feature_scale=0.000
     # NEW: feed original landmarks + fake image in discriminator!
     fake_scores_out = fp32(D.get_output_for(fake_X, real_landmarks, None))
 
+    fake_scores_out_pretrained = fp32(D_pretrained.get_output_for(fake_X, None))
+
+
+
     with tf.variable_scope('adv_loss'):
         D_scale = autosummary('Loss/scores/d_scale', D_scale)
         adv_loss = D_scale * tf.reduce_mean(tf.nn.softplus(-fake_scores_out))
         adv_loss = autosummary('Loss/scores/adv_loss', adv_loss)
 
-    loss = adv_loss
+        adv_loss_pret = D_scale * tf.reduce_mean(tf.nn.softplus(-fake_scores_out_pretrained))
+        adv_loss_pret = autosummary('Loss/scores/adv_loss_pret', adv_loss_pret)
 
-    return loss, 0, adv_loss
+    loss = adv_loss + adv_loss_pret
+
+    return loss, 0, adv_loss, adv_loss_pret
 
 #----------------------------------------------------------------------------
 # Discriminator loss function.
