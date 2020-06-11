@@ -24,9 +24,12 @@ def error(msg):
 #----------------------------------------------------------------------------
 
 class TFRecordExporter:
-    def __init__(self, tfrecord_dir, expected_images, print_progress=True, progress_interval=10):
+    def __init__(self, tfrecord_dir, expected_images, tfr_prefix = '', print_progress=True, progress_interval=10):
         self.tfrecord_dir       = tfrecord_dir
-        self.tfr_prefix         = os.path.join(self.tfrecord_dir, os.path.basename(self.tfrecord_dir))
+        if tfr_prefix != '':
+            self.tfr_prefix = tfr_prefix
+        else:
+            self.tfr_prefix         = os.path.join(self.tfrecord_dir, os.path.basename(self.tfrecord_dir))
         self.expected_images    = expected_images
         self.cur_images         = 0
         self.shape              = None
@@ -571,18 +574,57 @@ def create_from_image_pair(tfrecord_dir, image1_dir, image2_dir, shuffle):
     if channels not in [1, 3]:
         error('Input images must be stored as RGB or grayscale')
 
-    with TFRecordExporter(tfrecord_dir, len(image1_filenames)) as tfr:
-        order = tfr.choose_shuffled_order() if shuffle else np.arange(len(image1_filenames))
-        for idx in range(order.size):
-            img1 = np.asarray(PIL.Image.open(image1_filenames[order[idx]]).convert('RGB'))
-            img2 = np.asarray(PIL.Image.open(image2_filenames[order[idx]]).convert('RGB'))
-            if channels == 1:
-                img1 = img1[np.newaxis, :, :] # HW => CHW
-                img2 = img2[np.newaxis, :, :] # HW => CHW
-            else:
-                img1 = img1.transpose([2, 0, 1]) # HWC => CHW
-                img2 = img2.transpose([2, 0, 1]) # HWC => CHW
-            tfr.add_image_pair(img1, img2)
+    print(f'Expecting {len(image1_filenames)} Images')
+    
+    #set up parallel file writing
+    num_threads=16
+    subset_length = len(image1_filenames)/num_threads
+    img1_subset_list = []
+    img2_subset_list = []
+    for i in range(num_threads):
+        img1_subset_list.append(image1_filenames[i*subset_length:(i+1)*subset_length])
+        img2_subset_list.append(image2_filenames[i*subset_length:(i+1)*subset_length])
+
+    import multiprocessing
+    
+    coord = tf.train.Coordinator()
+    processes = []
+    
+    # Create the processes
+    for thread_index in range(num_threads):
+        params = (
+            tfrecord_dir,
+            img1_subset_list[thread_index],
+            img2_subset_list[thread_index],
+            channels,
+            thread_index
+        )
+    
+        thread_process = multiprocessing.Process(
+            target=create_dataset_subset,
+            args=params
+        )
+    
+        thread_process.start()
+        processes.append(thread_process)
+    coord.join(processes)
+
+def create_dataset_subset(tfrecord_dir, image1_filenames, image2_filenames, channels, thread):
+    with TFRecordExporter(tfrecord_dir, len(image1_filenames), trf_prefix=os.path.join(tfrecord_dir, os.path.basename(tfrecord_dir) + f'{thread}')) as tfr:
+        for idx in range(len(image1_filenames)):
+            try:
+                img1 = np.asarray(PIL.Image.open(image1_filenames[idx]).convert('RGB'))
+                img2 = np.asarray(PIL.Image.open(image2_filenames[idx]).convert('RGB'))
+                if channels == 1:
+                    img1 = img1[np.newaxis, :, :] # HW => CHW
+                    img2 = img2[np.newaxis, :, :] # HW => CHW
+                else:
+                    img1 = img1.transpose([2, 0, 1]) # HWC => CHW
+                    img2 = img2.transpose([2, 0, 1]) # HWC => CHW
+                tfr.add_image_pair(img1, img2)
+            except:
+                print(f'There was an error with adding an image pair. Skipping index {idx}')
+                continue
             
 #----------------------------------------------------------------------------
 
