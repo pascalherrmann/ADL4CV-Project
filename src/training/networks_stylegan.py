@@ -641,7 +641,7 @@ def D_basic(
 
     # Fixed structure: simple and efficient, but does not support progressive growing.
     x = d_input#fromrgb(d_input, resolution_log2)
-    for res in range(resolution_log2+1, 2, -1):
+    for res in range(resolution_log2+1, 5, -1):
         x = block(x, res)
     scores_out = block(x, 2) # adds dense layers.
 
