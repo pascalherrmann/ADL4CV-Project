@@ -126,3 +126,33 @@ def Encoder(input_img, size=128, filter=64, filter_max=512, num_layers=12, phase
             latent_w = bn(latent_w, phase=phase, name='fc_1')
 
         return latent_w
+
+
+def Conditional_Discriminator(input_img, landmarks, size=128, filter=64, filter_max=512, phase=True, **kwargs):
+    #print('using bn encoder phase: ', phase)
+    s0 = 4
+    num_blocks = int(np.log2(size / s0))
+    print("NUM_BLOCK=", num_blocks)
+
+    input_img.set_shape([None, 3, size, size])
+    landmarks.set_shape([None, 3, size, size])
+    d_input = tf.concat([input_img, landmarks], axis=1)
+
+    with tf.variable_scope('cond_disc'):
+        with tf.variable_scope('input_imageandlandmark_stage'):
+            net = conv2d(d_input, fmaps=filter, kernel=3, use_wscale=False)
+            net = leaky_relu(bn(net, phase=phase, name='cd_bn_input_stage'))
+
+        for i in range(num_blocks):
+            name_scope = 'cond_disc_res_block_%d' % (i)
+            nf1 = min(filter * 2 ** i, filter_max)
+            nf2 = min(filter * 2 ** (i + 1), filter_max)
+            net = downscale2d(net, factor=2)
+            net = residual_block_bn(net, fin=nf1, fout=nf2, phase=phase, scope=name_scope)
+
+        with tf.variable_scope('cond_disc_fc'):
+            latent_w = dense(net, fmaps=512*1, gain=1, use_wscale=False)
+            latent_w = bn(latent_w, phase=phase, name='cd_fc_1')
+            output = dense(latent_w, fmaps=1, gain=1, use_wscale=False)
+
+        return output

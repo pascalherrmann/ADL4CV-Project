@@ -147,7 +147,9 @@ def training_loop(
             # Here, the discriminator is initialized.
             # Creates an instnace of network, the architecture is defined in training.networks_stylegan.D_basic"
             # Also the arguments (num_channels, resolution, label_size) are passed to that function.
-            D = tflib.Network('D', num_channels=3, resolution=Gs.output_shape[3], label_size=0, func_name="training.networks_stylegan.D_basic")
+            #D = tflib.Network('D', num_channels=3, resolution=Gs.output_shape[3], label_size=0, func_name="training.networks_stylegan.D_basic")
+            D = tflib.Network('D', size=128, filter=64, filter_max=512, num_layers=num_layers, phase=True, func_name='training.networks_encoder.Conditional_Discriminator')
+
             print("Creating NEW Discriminator!!!")
             num_layers = Gs.components.synthesis.input_shape[1]
             E = tflib.Network('E', size=submit_config.image_size, filter=64, filter_max=1024, num_layers=num_layers, phase=True, **Encoder_args)
@@ -285,7 +287,7 @@ def training_loop(
 
 
             samples2 = sess.run(fake_X_val, feed_dict={real_test: portrait_images_test, real_landmarks_test: landmark_images_test})
-            orin_recon = np.concatenate([landmark_images_test, samples2], axis=0) # bild: oben input, unten: reconstruct
+            orin_recon = np.concatenate([portrait_images_test, landmark_images_test, samples2], axis=0) # bild: oben input, unten: reconstruct
             orin_recon = adjust_pixel_range(orin_recon)
             orin_recon = fuse_images(orin_recon, row=2, col=submit_config.batch_size_test)
             # save image results during training, first row is original images and the second row is reconstructed images

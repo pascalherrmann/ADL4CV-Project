@@ -32,7 +32,7 @@ def E_loss(E, G, D, perceptual_model, reals, real_landmarks, feature_scale=0.000
     fake_X = G.components.synthesis.get_output_for(latent_wp, randomize_noise=False)
 
     # NEW: feed original landmarks + fake image in discriminator!
-    fake_scores_out = fp32(D.get_output_for(fake_X, real_landmarks, None))
+    fake_scores_out = fp32(D.get_output_for(fake_X, real_landmarks))
 
     with tf.variable_scope('adv_loss'):
         D_scale = autosummary('Loss/scores/d_scale', D_scale)
@@ -61,8 +61,8 @@ def D_logistic_simplegp(E, G, D, reals, real_landmarks, r1_gamma=10.0):
 
     # get scores for fake and real images
     # NEW: also feed in landmarks
-    real_scores_out = fp32(D.get_output_for(reals, real_landmarks, None))
-    fake_scores_out = fp32(D.get_output_for(fake_X, real_landmarks, None))
+    real_scores_out = fp32(D.get_output_for(reals, real_landmarks))
+    fake_scores_out = fp32(D.get_output_for(fake_X, real_landmarks))
 
     real_scores_out = autosummary('Loss/scores/real', real_scores_out)
     fake_scores_out = autosummary('Loss/scores/fake', fake_scores_out)
