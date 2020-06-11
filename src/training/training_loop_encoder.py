@@ -22,7 +22,7 @@ def process_reals(x, mirror_augment, drange_data, drange_net):
         with tf.name_scope('DynamicRange'):
             x = tf.cast(x, tf.float32)
             x = misc.adjust_dynamic_range(x, drange_data, drange_net)
-        if False #mirror_augment: #todo
+        if False: #mirror_augment: #todo
             with tf.name_scope('MirrorAugment'):
                 s = tf.shape(x)
                 mask = tf.random_uniform([s[0], 1, 1, 1], 0.0, 1.0)
@@ -185,7 +185,14 @@ def training_loop(
                 # get loss for encoder
                 #
                 E_loss, recon_loss, adv_loss = dnnlib.util.call_func_by_name(E=E_gpu, G=G_gpu, D=D_gpu, perceptual_model=perceptual_model, reals=real_gpu,real_landmarks=landmarks_gpu, **E_loss_args) #call loss function (loss_enocder)
-                E_loss_rec += recon_loss
+                
+                
+                #
+                # don't use recon-loss
+                #
+                #E_loss_rec += recon_loss
+                
+
                 E_loss_adv += adv_loss
             with tf.name_scope('D_loss'), tf.control_dependencies(None):
                 #
@@ -243,14 +250,22 @@ def training_loop(
 
 
         feed_dict_1 = {real_train: portrait_images, real_landmarks_train: landmark_images} # todo: feed dict ändern.
-        _, recon_, adv_ = sess.run([E_train_op, E_loss_rec, E_loss_adv], feed_dict_1) #todo: feed_dict ändern
+        
+        #print("portrait_images", portrait_images.shape)
+        #print("landmark_images", landmark_images.shape)
+        #print("E_train_op", E_train_op)
+        #print("E_loss_rec", E_loss_rec)
+        #print("E_loss_adv",E_loss_adv)
+        
+        # don't use E_loss_rec
+        _, adv_ = sess.run([E_train_op, E_loss_adv], feed_dict_1) #todo: feed_dict ändern
         _, d_r_, d_f_, d_g_ = sess.run([D_train_op, D_loss_real, D_loss_fake, D_loss_grad], feed_dict_1)
 
         cur_nimg += submit_config.batch_size
 
         if it % 50 == 0:
             print('Iter: %06d recon_loss: %-6.4f adv_loss: %-6.4f d_r_loss: %-6.4f d_f_loss: %-6.4f d_reg: %-6.4f time:%-12s' % (
-                it, recon_, adv_, d_r_, d_f_, d_g_, dnnlib.util.format_time(time.time() - start_time)))
+                it, -1, adv_, d_r_, d_f_, d_g_, dnnlib.util.format_time(time.time() - start_time)))
             sys.stdout.flush()
             tflib.autosummary.save_summaries(summary_log, it)
             
