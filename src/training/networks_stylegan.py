@@ -161,11 +161,11 @@ def dense(x, fmaps, **kwargs):
 #----------------------------------------------------------------------------
 # Convolutional layer.
 
-def conv2d(x, fmaps, kernel, **kwargs):
-    assert kernel >= 1 and kernel % 2 == 1
+def conv2d(x, fmaps, kernel, stride=1, **kwargs):
+    #assert kernel >= 1 and kernel % 2 == 1
     w = get_weight([kernel, kernel, x.shape[1].value, fmaps], **kwargs)
     w = tf.cast(w, x.dtype)
-    return tf.nn.conv2d(x, w, strides=[1,1,1,1], padding='SAME', data_format='NCHW')
+    return tf.nn.conv2d(x, w, strides=[stride,stride,stride,stride], padding='SAME', data_format='NCHW')
 
 #----------------------------------------------------------------------------
 # Fused convolution + scaling.
@@ -632,7 +632,7 @@ def D_basic(
                 if mbstd_group_size > 1:
                     x = minibatch_stddev_layer(x, mbstd_group_size, mbstd_num_features)
                 with tf.variable_scope('Conv'):
-                    x = act(apply_bias(conv2d(x, fmaps=nf(res-1), kernel=4, gain=gain, use_wscale=use_wscale)))
+                    x = act(apply_bias(conv2d(x, fmaps=nf(res-1), kernel=4, stride=2, gain=gain, use_wscale=use_wscale)))
                 with tf.variable_scope('Dense0'):
                     x = act(apply_bias(dense(x, fmaps=nf(res-2), gain=gain, use_wscale=use_wscale)))
                 with tf.variable_scope('Dense1'):
