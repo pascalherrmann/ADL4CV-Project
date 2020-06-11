@@ -599,7 +599,7 @@ def D_basic(
     images_in.set_shape([None, num_channels, resolution, resolution])
     landmarks_in.set_shape([None, num_channels, resolution, resolution])
 
-    d_input = tf.concat([images_in, landmarks_in], axis=1)
+    d_input = tf.concat((images_in, landmarks_in), axis=1)
 
     labels_in.set_shape([None, label_size])
 
@@ -625,14 +625,14 @@ def D_basic(
         with tf.variable_scope('%dx%d' % (2**res, 2**res)):
             if res >= 3: # 8x8 and up
                 with tf.variable_scope('Conv0'):
-                    x = act(apply_bias(conv2d(x, fmaps=nf(res-1), kernel=3, gain=gain, use_wscale=use_wscale)))
+                    x = act(apply_bias(conv2d(x, fmaps=nf(res-1), kernel=4, stride=2, gain=gain, use_wscale=use_wscale)))
                 with tf.variable_scope('Conv1_down'):
                     x = act(apply_bias(conv2d_downscale2d(blur(x), fmaps=nf(res-2), kernel=3, gain=gain, use_wscale=use_wscale, fused_scale=fused_scale)))
             else: # 4x4 i.e. res = 2
                 if mbstd_group_size > 1:
                     x = minibatch_stddev_layer(x, mbstd_group_size, mbstd_num_features)
                 with tf.variable_scope('Conv'):
-                    x = act(apply_bias(conv2d(x, fmaps=nf(res-1), kernel=3, gain=gain, use_wscale=use_wscale)))
+                    x = act(apply_bias(conv2d(x, fmaps=nf(res-1), kernel=4, gain=gain, use_wscale=use_wscale)))
                 with tf.variable_scope('Dense0'):
                     x = act(apply_bias(dense(x, fmaps=nf(res-2), gain=gain, use_wscale=use_wscale)))
                 with tf.variable_scope('Dense1'):
@@ -640,8 +640,8 @@ def D_basic(
             return x
 
     # Fixed structure: simple and efficient, but does not support progressive growing.
-    x = fromrgb(d_input, resolution_log2)
-    for res in range(resolution_log2, 2, -1):
+    x = d_input#fromrgb(d_input, resolution_log2)
+    for res in range(resolution_log2+1, 2, -1):
         x = block(x, res)
     scores_out = block(x, 2) # adds dense layers.
 
