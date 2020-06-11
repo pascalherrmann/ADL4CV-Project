@@ -169,10 +169,9 @@ def conv2d(x, fmaps, kernel, **kwargs):
 
 # new: 2x2 strides, 4x4 conv
 def discrim_conv(x, fmaps, stride, **kwargs):
-    assert kernel >= 1 and kernel % 2 == 1
     w = get_weight([4, 4, x.shape[1].value, fmaps], **kwargs)
     w = tf.cast(w, x.dtype)
-    return tf.nn.conv2d(x, w, strides=(stride,stride) padding='SAME', data_format='NCHW')
+    return tf.nn.conv2d(x, w, strides=(stride,stride), padding='SAME', data_format='NCHW')
 
 def batchnorm(inputs):
     return tf.layers.batch_normalization(inputs, axis=3, epsilon=1e-5, momentum=0.1, training=True, gamma_initializer=tf.random_normal_initializer(1.0, 0.02))
@@ -636,7 +635,7 @@ def D_basic(
 
     # layer_1: [batch, 256, 256, in_channels * 2] => [batch, 128, 128, ndf]
     with tf.variable_scope("layer_1"):
-        convolved = act(apply_bias(discrim_conv(d_input, 64, gain=gain, use_wscale=use_wscale, stride=stride)))
+        convolved = act(apply_bias(discrim_conv(d_input, 64, gain=gain, use_wscale=use_wscale, stride=2)))
         layers.append(convolved)
 
     for i in range(n_layers):
@@ -649,9 +648,9 @@ def D_basic(
                 layers.append(rectified)
 
     with tf.variable_scope("layer_%d" % (len(layers) + 1)):
-        convolved = discrim_conv(rectified, out_channels=1, stride=1)
+        convolved = discrim_conv(rectified, 1, stride=1)
         scores_out = tf.sigmoid(convolved)
-        layers.append(output)
+        layers.append(scores_out)
         ####
 
     if label_size:
