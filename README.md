@@ -16,7 +16,7 @@ Clone project & checkout branch
 
 ```
 !git clone https://adl4cv:GitHub111!@github.com/pascalherrmann/ADL4CV-Project
-%cd ADL4CV-Project/src
+%cd /content/ADL4CV-Project/src
 !git checkout run/<your branch you want to run>
 ```
 
