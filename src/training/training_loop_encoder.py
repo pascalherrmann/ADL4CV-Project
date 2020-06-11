@@ -148,10 +148,11 @@ def training_loop(
             # Creates an instnace of network, the architecture is defined in training.networks_stylegan.D_basic"
             # Also the arguments (num_channels, resolution, label_size) are passed to that function.
             #D = tflib.Network('D', num_channels=3, resolution=Gs.output_shape[3], label_size=0, func_name="training.networks_stylegan.D_basic")
+            num_layers = Gs.components.synthesis.input_shape[1]
+
             D = tflib.Network('D', size=128, filter=64, filter_max=512, num_layers=num_layers, phase=True, func_name='training.networks_encoder.Conditional_Discriminator')
 
             print("Creating NEW Discriminator!!!")
-            num_layers = Gs.components.synthesis.input_shape[1]
             E = tflib.Network('E', size=submit_config.image_size, filter=64, filter_max=1024, num_layers=num_layers, phase=True, **Encoder_args)
             start = 0
 

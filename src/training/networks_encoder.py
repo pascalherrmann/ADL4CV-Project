@@ -153,6 +153,9 @@ def Conditional_Discriminator(input_img, landmarks, size=128, filter=64, filter_
         with tf.variable_scope('cond_disc_fc'):
             latent_w = dense(net, fmaps=512*1, gain=1, use_wscale=False)
             latent_w = bn(latent_w, phase=phase, name='cd_fc_1')
+
+        # scopes sind wichtig!!! sonst sharing of variables w!!!
+        with tf.variable_scope('cond_disc_fc2'):
             output = dense(latent_w, fmaps=1, gain=1, use_wscale=False)
 
         return output
