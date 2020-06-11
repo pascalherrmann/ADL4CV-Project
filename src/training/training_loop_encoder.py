@@ -22,7 +22,7 @@ def process_reals(x, mirror_augment, drange_data, drange_net):
         with tf.name_scope('DynamicRange'):
             x = tf.cast(x, tf.float32)
             x = misc.adjust_dynamic_range(x, drange_data, drange_net)
-        if mirror_augment:
+        if False #mirror_augment: #todo
             with tf.name_scope('MirrorAugment'):
                 s = tf.shape(x)
                 mask = tf.random_uniform([s[0], 1, 1, 1], 0.0, 1.0)
@@ -31,14 +31,23 @@ def process_reals(x, mirror_augment, drange_data, drange_net):
         return x
 
 
+# new: extracting landmark
 def parse_tfrecord_tf(record):
     features = tf.parse_single_example(record, features={
         'shape': tf.FixedLenFeature([3], tf.int64),
-        'data': tf.FixedLenFeature([], tf.string)})
-    data = tf.decode_raw(features['data'], tf.uint8)
-    return tf.reshape(data, features['shape'])
+        'portrait': tf.FixedLenFeature([], tf.string),
+        'landmark': tf.FixedLenFeature([], tf.string)})
+    portrait = tf.decode_raw(features['portrait'], tf.uint8)
+    landmark = tf.decode_raw(features['landmark'], tf.uint8)
+    portrait = tf.reshape(portrait, (1, features['shape'][0], features['shape'][1], features['shape'][2]))
+    landmark = tf.reshape(landmark, (1, features['shape'][0], features['shape'][1], features['shape'][2]))
+    data = tf.concat((portrait, landmark), axis=0)
+    return data
 
 
+##
+## todo
+##
 def get_train_data(sess, data_dir, submit_config, mode):
     if mode == 'train':
         shuffle = True; repeat = True; batch_size = submit_config.batch_size
@@ -49,12 +58,14 @@ def get_train_data(sess, data_dir, submit_config, mode):
 
     dset = tf.data.TFRecordDataset(data_dir)
     dset = dset.map(parse_tfrecord_tf, num_parallel_calls=16)
+
     if shuffle:
-        bytes_per_item = np.prod([3, submit_config.image_size, submit_config.image_size]) * np.dtype('uint8').itemsize
+        bytes_per_item = np.prod([3*2, submit_config.image_size, submit_config.image_size]) * np.dtype('uint8').itemsize
         dset = dset.shuffle(((4096 << 20) - 1) // bytes_per_item + 1)
     if repeat:
         dset = dset.repeat()
     dset = dset.batch(batch_size)
+
     train_iterator = tf.data.Iterator.from_structure(dset.output_types, dset.output_shapes)
     training_init_op = train_iterator.make_initializer(dset)
     image_batch = train_iterator.get_next()
@@ -105,9 +116,16 @@ def training_loop(
     tflib.init_tf(tf_config)
 
     with tf.name_scope('input'):
+        # das kommt aus dem feeddict!!!
         real_train = tf.placeholder(tf.float32, [submit_config.batch_size, 3, submit_config.image_size, submit_config.image_size], name='real_image_train')
         real_test = tf.placeholder(tf.float32, [submit_config.batch_size_test, 3, submit_config.image_size, submit_config.image_size], name='real_image_test')
         real_split = tf.split(real_train, num_or_size_splits=submit_config.num_gpus, axis=0)
+
+        # placeholders for landmark inputs for the network (is set in feed dict)
+        real_landmarks_train = tf.placeholder(tf.float32, [submit_config.batch_size, 3, submit_config.image_size, submit_config.image_size], name='real_landmarks_train')
+        real_landmarks_test = tf.placeholder(tf.float32, [submit_config.batch_size_test, 3, submit_config.image_size, submit_config.image_size], name='real_landmarks_test')
+        real_landmarks_split = tf.split(real_landmarks_train, num_or_size_splits=submit_config.num_gpus, axis=0)
+
 
     with tf.device('/gpu:0'):
         if resume_run_id is not None:
@@ -119,6 +137,16 @@ def training_loop(
         else:
             print('Constructing networks...')
             G, _, Gs = misc.load_pkl(decoder_pkl.decoder_pkl)
+
+            # Creating New Discriminator
+            # as subclass of tflib.Network
+            # specification in training.networks_stylegan.D_basic
+
+
+            #
+            # Here, the discriminator is initialized.
+            # Creates an instnace of network, the architecture is defined in training.networks_stylegan.D_basic"
+            # Also the arguments (num_channels, resolution, label_size) are passed to that function.
             D = tflib.Network('D', num_channels=3, resolution=Gs.output_shape[3], label_size=0, func_name="training.networks_stylegan.D_basic")
             print("Creating NEW Discriminator!!!")
             num_layers = Gs.components.synthesis.input_shape[1]
@@ -148,12 +176,22 @@ def training_loop(
             G_gpu = Gs if gpu == 0 else Gs.clone(Gs.name + '_shadow')
             perceptual_model = PerceptualModel(img_size=[E_loss_args.perceptual_img_size, E_loss_args.perceptual_img_size], multi_layers=False)
             real_gpu = process_reals(real_split[gpu], mirror_augment, drange_data, drange_net)
+
+            # get landmarks gpu
+            landmarks_gpu = process_reals(real_landmarks_split[gpu], mirror_augment, drange_data, drange_net)
             with tf.name_scope('E_loss'), tf.control_dependencies(None):
-                E_loss, recon_loss, adv_loss = dnnlib.util.call_func_by_name(E=E_gpu, G=G_gpu, D=D_gpu, perceptual_model=perceptual_model, reals=real_gpu, **E_loss_args)
+
+                #
+                # get loss for encoder
+                #
+                E_loss, recon_loss, adv_loss = dnnlib.util.call_func_by_name(E=E_gpu, G=G_gpu, D=D_gpu, perceptual_model=perceptual_model, reals=real_gpu,real_landmarks=landmarks_gpu, **E_loss_args) #call loss function (loss_enocder)
                 E_loss_rec += recon_loss
                 E_loss_adv += adv_loss
             with tf.name_scope('D_loss'), tf.control_dependencies(None):
-                D_loss, loss_fake, loss_real, loss_gp = dnnlib.util.call_func_by_name(E=E_gpu, G=G_gpu, D=D_gpu, reals=real_gpu, **D_loss_args)
+                #
+                # get loss for discriminator
+                #
+                D_loss, loss_fake, loss_real, loss_gp = dnnlib.util.call_func_by_name(E=E_gpu, G=G_gpu, D=D_gpu, reals=real_gpu, real_landmarks=landmarks_gpu, **D_loss_args)
                 D_loss_real += loss_real
                 D_loss_fake += loss_fake
                 D_loss_grad += loss_gp
@@ -198,8 +236,14 @@ def training_loop(
     for it in range(start, max_iters):
 
         batch_images = sess.run(image_batch_train)
-        feed_dict_1 = {real_train: batch_images}
-        _, recon_, adv_ = sess.run([E_train_op, E_loss_rec, E_loss_adv], feed_dict_1)
+
+        #train
+        portrait_images = batch_images[:,0,:,:,:]
+        landmark_images = batch_images[:,1,:,:,:]
+
+
+        feed_dict_1 = {real_train: portrait_images, real_landmarks_train: landmark_images} # todo: feed dict ändern.
+        _, recon_, adv_ = sess.run([E_train_op, E_loss_rec, E_loss_adv], feed_dict_1) #todo: feed_dict ändern
         _, d_r_, d_f_, d_g_ = sess.run([D_train_op, D_loss_real, D_loss_fake, D_loss_grad], feed_dict_1)
 
         cur_nimg += submit_config.batch_size
@@ -215,9 +259,18 @@ def training_loop(
             
         if it % 500 == 0:
             batch_images_test = sess.run(image_batch_test)
-            batch_images_test = misc.adjust_dynamic_range(batch_images_test.astype(np.float32), [0, 255], [-1., 1.])
-            samples2 = sess.run(fake_X_val, feed_dict={real_test: batch_images_test})
-            orin_recon = np.concatenate([batch_images_test, samples2], axis=0)
+
+            #test
+            portrait_images_test = batch_images_test[:,0,:,:,:]
+            landmark_images_test = batch_images_test[:,1,:,:,:]
+
+
+            portrait_images_test = misc.adjust_dynamic_range(portrait_images_test.astype(np.float32), [0, 255], [-1., 1.])
+            landmark_images_test = misc.adjust_dynamic_range(landmark_images_test.astype(np.float32), [0, 255], [-1., 1.])
+
+
+            samples2 = sess.run(fake_X_val, feed_dict={real_test: portrait_images_test, real_landmarks_test: landmark_images_test})
+            orin_recon = np.concatenate([landmark_images_test, samples2], axis=0) # bild: oben input, unten: reconstruct
             orin_recon = adjust_pixel_range(orin_recon)
             orin_recon = fuse_images(orin_recon, row=2, col=submit_config.batch_size_test)
             # save image results during training, first row is original images and the second row is reconstructed images
