@@ -575,6 +575,7 @@ def create_from_image_pair(tfrecord_dir, image1_dir, image2_dir, shuffle):
         error('Input images must be stored as RGB or grayscale')
 
     print(f'Expecting {len(image1_filenames)} Images')
+    print(len(image2_filenames))
     
     #set up parallel file writing
     num_threads=16
@@ -582,8 +583,8 @@ def create_from_image_pair(tfrecord_dir, image1_dir, image2_dir, shuffle):
     img1_subset_list = []
     img2_subset_list = []
     for i in range(num_threads):
-        img1_subset_list.append(image1_filenames[i*subset_length:(i+1)*subset_length])
-        img2_subset_list.append(image2_filenames[i*subset_length:(i+1)*subset_length])
+        img1_subset_list.append(image1_filenames[int(i*subset_length):int((i+1)*subset_length)])
+        img2_subset_list.append(image2_filenames[int(i*subset_length):int((i+1)*subset_length)])
 
     import multiprocessing
     
@@ -610,7 +611,7 @@ def create_from_image_pair(tfrecord_dir, image1_dir, image2_dir, shuffle):
     coord.join(processes)
 
 def create_dataset_subset(tfrecord_dir, image1_filenames, image2_filenames, channels, thread):
-    with TFRecordExporter(tfrecord_dir, len(image1_filenames), trf_prefix=os.path.join(tfrecord_dir, os.path.basename(tfrecord_dir) + f'{thread}')) as tfr:
+    with TFRecordExporter(tfrecord_dir, len(image1_filenames), tfr_prefix=os.path.join(tfrecord_dir, os.path.basename(tfrecord_dir) + f'{thread}')) as tfr:
         for idx in range(len(image1_filenames)):
             try:
                 img1 = np.asarray(PIL.Image.open(image1_filenames[idx]).convert('RGB'))

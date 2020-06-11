@@ -1,10 +1,3 @@
-# Copyright (c) 2019, NVIDIA CORPORATION. All rights reserved.
-#
-# This work is licensed under the Creative Commons Attribution-NonCommercial
-# 4.0 International License. To view a copy of this license, visit
-# http://creativecommons.org/licenses/by-nc/4.0/ or send a letter to
-# Creative Commons, PO Box 1866, Mountain View, CA 94042, USA.
-
 """Tool for creating multi-resolution TFRecords datasets for StyleGAN and ProGAN."""
 
 # pylint: disable=too-many-lines
@@ -18,9 +11,9 @@ import traceback
 import numpy as np
 import tensorflow as tf
 import PIL.Image
-import dnnlib.tflib as tflib
+#import dnnlib.tflib as tflib
 
-from training import dataset
+#from training import dataset
 
 #----------------------------------------------------------------------------
 
@@ -31,9 +24,12 @@ def error(msg):
 #----------------------------------------------------------------------------
 
 class TFRecordExporter:
-    def __init__(self, tfrecord_dir, expected_images, print_progress=True, progress_interval=10):
+    def __init__(self, tfrecord_dir, expected_images, tfr_prefix = '', print_progress=True, progress_interval=10):
         self.tfrecord_dir       = tfrecord_dir
-        self.tfr_prefix         = os.path.join(self.tfrecord_dir, os.path.basename(self.tfrecord_dir))
+        if tfr_prefix != '':
+            self.tfr_prefix = tfr_prefix
+        else:
+            self.tfr_prefix         = os.path.join(self.tfrecord_dir, os.path.basename(self.tfrecord_dir))
         self.expected_images    = expected_images
         self.cur_images         = 0
         self.shape              = None
@@ -98,7 +94,7 @@ class TFRecordExporter:
             assert self.shape[1] == self.shape[2]
             assert self.shape[1] == 2**self.resolution_log2
             tfr_opt = tf.io.TFRecordOptions(compression_type='')
-            for lod in range(1):# self.resolution_log2 - 1): //only full 128px stored
+            for lod in range(1):# self.resolution_log2 - 1):
                 tfr_file = self.tfr_prefix + '-r%02d.tfrecords' % (self.resolution_log2 - lod)
                 self.tfr_writers.append(tf.io.TFRecordWriter(tfr_file, tfr_opt))
         assert img1.shape == self.shape
@@ -220,99 +216,99 @@ class ThreadPool(object):
 
 #----------------------------------------------------------------------------
 
-def display(tfrecord_dir):
-    print('Loading dataset "%s"' % tfrecord_dir)
-    tflib.init_tf({'gpu_options.allow_growth': True})
-    dset = dataset.TFRecordDataset(tfrecord_dir, max_label_size='full', repeat=False, shuffle_mb=0)
-    tflib.init_uninitialized_vars()
-    import cv2  # pip install opencv-python
-
-    idx = 0
-    while True:
-        try:
-            images, labels = dset.get_minibatch_np(1)
-        except tf.errors.OutOfRangeError:
-            break
-        if idx == 0:
-            print('Displaying images')
-            cv2.namedWindow('dataset_tool')
-            print('Press SPACE or ENTER to advance, ESC to exit')
-        print('\nidx = %-8d\nlabel = %s' % (idx, labels[0].tolist()))
-        cv2.imshow('dataset_tool', images[0].transpose(1, 2, 0)[:, :, ::-1]) # CHW => HWC, RGB => BGR
-        idx += 1
-        if cv2.waitKey() == 27:
-            break
-    print('\nDisplayed %d images.' % idx)
-
-#----------------------------------------------------------------------------
-
-def extract(tfrecord_dir, output_dir):
-    print('Loading dataset "%s"' % tfrecord_dir)
-    tflib.init_tf({'gpu_options.allow_growth': True})
-    dset = dataset.TFRecordDataset(tfrecord_dir, max_label_size=0, repeat=False, shuffle_mb=0)
-    tflib.init_uninitialized_vars()
-
-    print('Extracting images to "%s"' % output_dir)
-    if not os.path.isdir(output_dir):
-        os.makedirs(output_dir)
-    idx = 0
-    while True:
-        if idx % 10 == 0:
-            print('%d\r' % idx, end='', flush=True)
-        try:
-            images, _labels = dset.get_minibatch_np(1)
-        except tf.errors.OutOfRangeError:
-            break
-        if images.shape[1] == 1:
-            img = PIL.Image.fromarray(images[0][0], 'L')
-        else:
-            img = PIL.Image.fromarray(images[0].transpose(1, 2, 0), 'RGB')
-        img.save(os.path.join(output_dir, 'img%08d.png' % idx))
-        idx += 1
-    print('Extracted %d images.' % idx)
+#def display(tfrecord_dir):
+#    print('Loading dataset "%s"' % tfrecord_dir)
+#    tflib.init_tf({'gpu_options.allow_growth': True})
+#    dset = dataset.TFRecordDataset(tfrecord_dir, max_label_size='full', repeat=False, shuffle_mb=0)
+#    tflib.init_uninitialized_vars()
+#    import cv2  # pip install opencv-python
+#
+#    idx = 0
+#    while True:
+#        try:
+#            images, labels = dset.get_minibatch_np(1)
+#        except tf.errors.OutOfRangeError:
+#            break
+#        if idx == 0:
+#            print('Displaying images')
+#            cv2.namedWindow('dataset_tool')
+#            print('Press SPACE or ENTER to advance, ESC to exit')
+#        print('\nidx = %-8d\nlabel = %s' % (idx, labels[0].tolist()))
+#        cv2.imshow('dataset_tool', images[0].transpose(1, 2, 0)[:, :, ::-1]) # CHW => HWC, RGB => BGR
+#        idx += 1
+#        if cv2.waitKey() == 27:
+#            break
+#    print('\nDisplayed %d images.' % idx)
 
 #----------------------------------------------------------------------------
 
-def compare(tfrecord_dir_a, tfrecord_dir_b, ignore_labels):
-    max_label_size = 0 if ignore_labels else 'full'
-    print('Loading dataset "%s"' % tfrecord_dir_a)
-    tflib.init_tf({'gpu_options.allow_growth': True})
-    dset_a = dataset.TFRecordDataset(tfrecord_dir_a, max_label_size=max_label_size, repeat=False, shuffle_mb=0)
-    print('Loading dataset "%s"' % tfrecord_dir_b)
-    dset_b = dataset.TFRecordDataset(tfrecord_dir_b, max_label_size=max_label_size, repeat=False, shuffle_mb=0)
-    tflib.init_uninitialized_vars()
+#def extract(tfrecord_dir, output_dir):
+#    print('Loading dataset "%s"' % tfrecord_dir)
+#    tflib.init_tf({'gpu_options.allow_growth': True})
+#    dset = dataset.TFRecordDataset(tfrecord_dir, max_label_size=0, repeat=False, shuffle_mb=0)
+#    tflib.init_uninitialized_vars()
+#
+#    print('Extracting images to "%s"' % output_dir)
+#    if not os.path.isdir(output_dir):
+#        os.makedirs(output_dir)
+#    idx = 0
+#    while True:
+#        if idx % 10 == 0:
+#            print('%d\r' % idx, end='', flush=True)
+#        try:
+#            images, _labels = dset.get_minibatch_np(1)
+#        except tf.errors.OutOfRangeError:
+#            break
+#        if images.shape[1] == 1:
+#            img = PIL.Image.fromarray(images[0][0], 'L')
+#        else:
+#            img = PIL.Image.fromarray(images[0].transpose(1, 2, 0), 'RGB')
+#        img.save(os.path.join(output_dir, 'img%08d.png' % idx))
+#        idx += 1
+#    print('Extracted %d images.' % idx)
 
-    print('Comparing datasets')
-    idx = 0
-    identical_images = 0
-    identical_labels = 0
-    while True:
-        if idx % 100 == 0:
-            print('%d\r' % idx, end='', flush=True)
-        try:
-            images_a, labels_a = dset_a.get_minibatch_np(1)
-        except tf.errors.OutOfRangeError:
-            images_a, labels_a = None, None
-        try:
-            images_b, labels_b = dset_b.get_minibatch_np(1)
-        except tf.errors.OutOfRangeError:
-            images_b, labels_b = None, None
-        if images_a is None or images_b is None:
-            if images_a is not None or images_b is not None:
-                print('Datasets contain different number of images')
-            break
-        if images_a.shape == images_b.shape and np.all(images_a == images_b):
-            identical_images += 1
-        else:
-            print('Image %d is different' % idx)
-        if labels_a.shape == labels_b.shape and np.all(labels_a == labels_b):
-            identical_labels += 1
-        else:
-            print('Label %d is different' % idx)
-        idx += 1
-    print('Identical images: %d / %d' % (identical_images, idx))
-    if not ignore_labels:
-        print('Identical labels: %d / %d' % (identical_labels, idx))
+#----------------------------------------------------------------------------
+
+#def compare(tfrecord_dir_a, tfrecord_dir_b, ignore_labels):
+#    max_label_size = 0 if ignore_labels else 'full'
+#    print('Loading dataset "%s"' % tfrecord_dir_a)
+#    tflib.init_tf({'gpu_options.allow_growth': True})
+#    dset_a = dataset.TFRecordDataset(tfrecord_dir_a, max_label_size=max_label_size, repeat=False, shuffle_mb=0)
+#    print('Loading dataset "%s"' % tfrecord_dir_b)
+#    dset_b = dataset.TFRecordDataset(tfrecord_dir_b, max_label_size=max_label_size, repeat=False, shuffle_mb=0)
+#    tflib.init_uninitialized_vars()
+#
+#    print('Comparing datasets')
+#    idx = 0
+#    identical_images = 0
+#    identical_labels = 0
+#    while True:
+#        if idx % 100 == 0:
+#            print('%d\r' % idx, end='', flush=True)
+#        try:
+#            images_a, labels_a = dset_a.get_minibatch_np(1)
+#        except tf.errors.OutOfRangeError:
+#            images_a, labels_a = None, None
+#        try:
+#            images_b, labels_b = dset_b.get_minibatch_np(1)
+#        except tf.errors.OutOfRangeError:
+#            images_b, labels_b = None, None
+#        if images_a is None or images_b is None:
+#            if images_a is not None or images_b is not None:
+#                print('Datasets contain different number of images')
+#            break
+#        if images_a.shape == images_b.shape and np.all(images_a == images_b):
+#            identical_images += 1
+#        else:
+#            print('Image %d is different' % idx)
+#        if labels_a.shape == labels_b.shape and np.all(labels_a == labels_b):
+#            identical_labels += 1
+#        else:
+#            print('Label %d is different' % idx)
+#        idx += 1
+#    print('Identical images: %d / %d' % (identical_images, idx))
+#    if not ignore_labels:
+#        print('Identical labels: %d / %d' % (identical_labels, idx))
 
 #----------------------------------------------------------------------------
 
@@ -555,7 +551,7 @@ def create_from_images(tfrecord_dir, image_dir, shuffle):
             else:
                 img = img.transpose([2, 0, 1]) # HWC => CHW
             tfr.add_image(img)
-            
+
 #----------------------------------------------------------------------------
             
 def create_from_image_pair(tfrecord_dir, image1_dir, image2_dir, shuffle):
@@ -578,19 +574,59 @@ def create_from_image_pair(tfrecord_dir, image1_dir, image2_dir, shuffle):
     if channels not in [1, 3]:
         error('Input images must be stored as RGB or grayscale')
 
-    with TFRecordExporter(tfrecord_dir, len(image1_filenames)) as tfr:
-        order = tfr.choose_shuffled_order() if shuffle else np.arange(len(image1_filenames))
-        for idx in range(order.size):
-            img1 = np.asarray(PIL.Image.open(image1_filenames[order[idx]]).convert('RGB'))
-            img2 = np.asarray(PIL.Image.open(image2_filenames[order[idx]]).convert('RGB'))
-            if channels == 1:
-                img1 = img1[np.newaxis, :, :] # HW => CHW
-                img2 = img2[np.newaxis, :, :] # HW => CHW
-            else:
-                img1 = img1.transpose([2, 0, 1]) # HWC => CHW
-                img2 = img2.transpose([2, 0, 1]) # HWC => CHW
-            tfr.add_image_pair(img1, img2)
+    print(f'Expecting {len(image1_filenames)} Images')
+    print(len(image2_filenames))
+    
+    #set up parallel file writing
+    num_threads=16
+    subset_length = len(image1_filenames)/num_threads
+    img1_subset_list = []
+    img2_subset_list = []
+    for i in range(num_threads):
+        img1_subset_list.append(image1_filenames[int(i*subset_length):int((i+1)*subset_length)])
+        img2_subset_list.append(image2_filenames[int(i*subset_length):int((i+1)*subset_length)])
 
+    import multiprocessing
+    
+    coord = tf.train.Coordinator()
+    processes = []
+    
+    # Create the processes
+    for thread_index in range(num_threads):
+        params = (
+            tfrecord_dir,
+            img1_subset_list[thread_index],
+            img2_subset_list[thread_index],
+            channels,
+            thread_index
+        )
+    
+        thread_process = multiprocessing.Process(
+            target=create_dataset_subset,
+            args=params
+        )
+    
+        thread_process.start()
+        processes.append(thread_process)
+    coord.join(processes)
+
+def create_dataset_subset(tfrecord_dir, image1_filenames, image2_filenames, channels, thread):
+    with TFRecordExporter(tfrecord_dir, len(image1_filenames), tfr_prefix=os.path.join(tfrecord_dir, os.path.basename(tfrecord_dir) + f'{thread}')) as tfr:
+        for idx in range(len(image1_filenames)):
+            try:
+                img1 = np.asarray(PIL.Image.open(image1_filenames[idx]).convert('RGB'))
+                img2 = np.asarray(PIL.Image.open(image2_filenames[idx]).convert('RGB'))
+                if channels == 1:
+                    img1 = img1[np.newaxis, :, :] # HW => CHW
+                    img2 = img2[np.newaxis, :, :] # HW => CHW
+                else:
+                    img1 = img1.transpose([2, 0, 1]) # HWC => CHW
+                    img2 = img2.transpose([2, 0, 1]) # HWC => CHW
+                tfr.add_image_pair(img1, img2)
+            except:
+                print(f'There was an error with adding an image pair. Skipping index {idx}')
+                continue
+            
 #----------------------------------------------------------------------------
 
 def create_from_hdf5(tfrecord_dir, hdf5_filename, shuffle):
