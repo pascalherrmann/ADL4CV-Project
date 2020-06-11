@@ -599,7 +599,7 @@ def D_basic(
     images_in.set_shape([None, num_channels, resolution, resolution])
     landmarks_in.set_shape([None, num_channels, resolution, resolution])
 
-    d_input=tf.concat(concat_dim=1,values=[images_in, landmarks_in]
+    d_input = tf.concat([images_in, landmarks_in], axis=1)
 
     labels_in.set_shape([None, label_size])
 
@@ -645,7 +645,7 @@ def D_basic(
         x = block(x, res)
     scores_out = block(x, 2) # adds dense layers.
 
-     if label_size:
+    if label_size:
         print("LABEL_SIZE=",label_size)
 
     assert scores_out.dtype == tf.as_dtype(dtype)
