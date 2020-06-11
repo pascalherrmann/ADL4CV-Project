@@ -165,7 +165,7 @@ def conv2d(x, fmaps, kernel, stride=1, **kwargs):
     #assert kernel >= 1 and kernel % 2 == 1
     w = get_weight([kernel, kernel, x.shape[1].value, fmaps], **kwargs)
     w = tf.cast(w, x.dtype)
-    return tf.nn.conv2d(x, w, strides=[stride,stride,stride,stride], padding='SAME', data_format='NCHW')
+    return tf.nn.conv2d(x, w, strides=[1,stride,stride,1], padding='SAME', data_format='NCHW')
 
 #----------------------------------------------------------------------------
 # Fused convolution + scaling.
