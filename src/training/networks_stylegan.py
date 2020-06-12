@@ -599,8 +599,9 @@ def D_basic(
     images_in.set_shape([None, num_channels, resolution, resolution])
     landmarks_in.set_shape([None, num_channels, resolution, resolution])
 
-    d_input = tf.concat([images_in, landmarks_in], axis=1)
-
+    #d_input = tf.concat([images_in, landmarks_in], axis=1)
+    d_input=images_in
+    
     labels_in.set_shape([None, label_size])
 
     d_input = tf.cast(d_input, dtype)
