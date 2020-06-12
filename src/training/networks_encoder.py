@@ -130,8 +130,9 @@ def Encoder(input_img, size=128, filter=64, filter_max=512, num_layers=12, phase
 
 def Conditional_Discriminator(input_img, landmarks, size=128, filter=64, filter_max=512, phase=True, **kwargs):
     #print('using bn encoder phase: ', phase)
-    s0 = 4
-    num_blocks = int(np.log2(size / s0))
+
+    num_blocks = 4
+
     print("NUM_BLOCK=", num_blocks)
 
     input_img.set_shape([None, 3, size, size])
@@ -150,7 +151,11 @@ def Conditional_Discriminator(input_img, landmarks, size=128, filter=64, filter_
             net = downscale2d(net, factor=2)
             net = residual_block_bn(net, fin=nf1, fout=nf2, phase=phase, scope=name_scope)
 
-        with tf.variable_scope('cond_disc_fc'):
+        with tf.variable_scope('cond_disc_fc0'):
+            latent_w = dense(net, fmaps=2000, gain=1, use_wscale=False)
+            latent_w = bn(latent_w, phase=phase, name='cd_fc_0')
+
+        with tf.variable_scope('cond_disc_fc1'):
             latent_w = dense(net, fmaps=512*1, gain=1, use_wscale=False)
             latent_w = bn(latent_w, phase=phase, name='cd_fc_1')
 
