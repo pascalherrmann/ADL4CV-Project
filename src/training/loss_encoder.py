@@ -24,6 +24,12 @@ def E_loss(E, G, D, perceptual_model, reals, real_landmarks, feature_scale=0.000
 
     # feed images (for now: only landmarks) into ENCODER! (stays for now the same, just with landmarks) -> get latent code w
     latent_w = E.get_output_for(real_landmarks, phase=True)
+    
+    #for the appearance, random sample in z-space and map to w
+    latent_w_appearance = G.components.mapping.get_output_for(np.random.randn(512))
+    
+    #combine landmark and appearance latent_codes
+    latent_w += latent_w_appearance
 
     # reshape fully connected latent_w to [batch, num_layers]
     latent_wp = tf.reshape(latent_w, [reals.shape[0], num_layers, latent_dim])
@@ -52,6 +58,12 @@ def D_logistic_simplegp(E, G, D, reals, real_landmarks, r1_gamma=10.0):
 
     # feed real images in encoder to get w
     latent_w = E.get_output_for(real_landmarks, phase=True)
+    
+    #for the appearance, random sample in z-space and map to w
+    latent_w_appearance = G.components.mapping.get_output_for(np.random.randn(512))
+    
+    #combine landmark and appearance latent_codes
+    latent_w += latent_w_appearance
 
     # reshape w
     latent_wp = tf.reshape(latent_w, [reals.shape[0], num_layers, latent_dim])
