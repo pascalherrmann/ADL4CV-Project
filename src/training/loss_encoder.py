@@ -36,7 +36,7 @@ def E_loss(E, G, D, perceptual_model, reals, real_landmarks, feature_scale=0.000
 
     with tf.variable_scope('adv_loss'):
         D_scale = autosummary('Loss/scores/d_scale', D_scale)
-        adv_loss = D_scale * tf.reduce_mean(tf.nn.softplus(-fake_scores_out))
+        adv_loss = tf.reduce_mean(tf.nn.softplus(-fake_scores_out))# *D_scale
         adv_loss = autosummary('Loss/scores/adv_loss', adv_loss)
 
     loss = adv_loss
@@ -64,10 +64,12 @@ def D_logistic_simplegp(E, G, D, reals, real_landmarks, r1_gamma=10.0):
     real_scores_out = fp32(D.get_output_for(reals, real_landmarks, None))
     fake_scores_out = fp32(D.get_output_for(fake_X, real_landmarks, None))
 
-    real_scores_out = autosummary('Loss/scores/real', real_scores_out)
-    fake_scores_out = autosummary('Loss/scores/fake', fake_scores_out)
+    #real_scores_out = autosummary('Loss/scores/real', real_scores_out)
+    #fake_scores_out = autosummary('Loss/scores/fake', fake_scores_out)
     loss_fake = tf.reduce_mean(tf.nn.softplus(fake_scores_out))
     loss_real = tf.reduce_mean(tf.nn.softplus(-real_scores_out))
+    loss_real = autosummary('Loss/scores/real', loss_real)
+    loss_fake = autosummary('Loss/scores/fake', loss_fake)
 
     with tf.name_scope('R1Penalty'):
         real_grads = fp32(tf.gradients(real_scores_out, [reals])[0])
