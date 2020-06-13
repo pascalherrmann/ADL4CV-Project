@@ -88,7 +88,7 @@ def test(E, Gs, real_test, submit_config):
             with tf.device("/gpu:%d" % gpu):
                 in_gpu = in_split[gpu]
                 latent_w = E.get_output_for(in_gpu, phase=False)
-                latent_w_appearance = G.components.mapping.get_output_for(np.random.randn(latent_w.shape[0], 512), [])
+                latent_w_appearance = G.components.mapping.get_output_for(np.random.randn(latent_w.shape[0], 512), np.zeros(latent_w.shape[0], 0))
                 latent_w += latent_w_appearance
                 latent_wp = tf.reshape(latent_w, [in_gpu.shape[0], num_layers, latent_dim])
                 fake_X_val = Gs.components.synthesis.get_output_for(latent_wp, randomize_noise=False)

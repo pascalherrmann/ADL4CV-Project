@@ -26,7 +26,7 @@ def E_loss(E, G, D, perceptual_model, reals, real_landmarks, feature_scale=0.000
     latent_w = E.get_output_for(real_landmarks, phase=True)
     
     #for the appearance, random sample in z-space and map to w
-    latent_w_appearance = G.components.mapping.get_output_for(np.random.randn(latent_w.shape[0], 512), [])
+    latent_w_appearance = G.components.mapping.get_output_for(np.random.randn(latent_w.shape[0], 512), np.zeros(latent_w.shape[0], 0))
     
     #combine landmark and appearance latent_codes
     latent_w += latent_w_appearance
@@ -60,7 +60,7 @@ def D_logistic_simplegp(E, G, D, reals, real_landmarks, r1_gamma=10.0):
     latent_w = E.get_output_for(real_landmarks, phase=True)
     
     #for the appearance, random sample in z-space and map to w
-    latent_w_appearance = G.components.mapping.get_output_for(np.random.randn(latent_w.shape[0], 512), [])
+    latent_w_appearance = G.components.mapping.get_output_for(np.random.randn(latent_w.shape[0], 512), np.zeros(latent_w.shape[0], 0))
     
     #combine landmark and appearance latent_codes
     latent_w += latent_w_appearance
