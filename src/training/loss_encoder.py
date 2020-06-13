@@ -26,13 +26,13 @@ def E_loss(E, G, D, perceptual_model, reals, real_landmarks, feature_scale=0.000
     latent_w = E.get_output_for(real_landmarks, phase=True)
     
     #for the appearance, random sample in z-space and map to w
-    latent_w_appearance = G.components.mapping.get_output_for(np.random.randn(latent_w.shape[0], 512), np.zeros(latent_w.shape[0], 0))
-    
-    #combine landmark and appearance latent_codes
-    latent_w += latent_w_appearance
+    latent_w_appearance = G.components.mapping.get_output_for(np.random.randn(latent_w.shape[0], 512), np.zeros((latent_w.shape[0], 0)))
 
     # reshape fully connected latent_w to [batch, num_layers]
     latent_wp = tf.reshape(latent_w, [reals.shape[0], num_layers, latent_dim])
+
+    #combine landmark and appearance latent_codes
+    latent_wp += latent_w_appearance
 
     # put w's in generator to get synthetic reconstructions
     fake_X = G.components.synthesis.get_output_for(latent_wp, randomize_noise=False)
@@ -60,13 +60,13 @@ def D_logistic_simplegp(E, G, D, reals, real_landmarks, r1_gamma=10.0):
     latent_w = E.get_output_for(real_landmarks, phase=True)
     
     #for the appearance, random sample in z-space and map to w
-    latent_w_appearance = G.components.mapping.get_output_for(np.random.randn(latent_w.shape[0], 512), np.zeros(latent_w.shape[0], 0))
-    
-    #combine landmark and appearance latent_codes
-    latent_w += latent_w_appearance
+    latent_w_appearance = G.components.mapping.get_output_for(np.random.randn(latent_w.shape[0], 512), np.zeros((latent_w.shape[0], 0)))
 
     # reshape w
     latent_wp = tf.reshape(latent_w, [reals.shape[0], num_layers, latent_dim])
+
+    #combine landmark and appearance latent_codes
+    latent_wp += latent_w_appearance
 
     # feed w in generator to "reconstruct" image (i.e., get fake images)
     fake_X = G.components.synthesis.get_output_for(latent_wp, randomize_noise=False)
