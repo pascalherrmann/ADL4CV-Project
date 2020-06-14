@@ -113,9 +113,11 @@ def Encoder(input_img, input_landmarks, size=128, filter=64, filter_max=512, num
     input_img.set_shape([None, 3, size, size])
     input_landmarks.set_shape([None, 3, size, size])
 
+    input_concatenated = tf.concat((input_img, input_landmarks), axis=0)
+
     with tf.variable_scope('encoder'):
         with tf.variable_scope('input_image_stage'):
-            net = conv2d(input_img, fmaps=filter, kernel=3, use_wscale=False)
+            net = conv2d(input_concatenated, fmaps=filter, kernel=3, use_wscale=False)
             net = leaky_relu(bn(net, phase=phase, name='bn_input_stage'))
 
         for i in range(num_blocks):
