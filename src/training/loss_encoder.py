@@ -17,7 +17,8 @@ def fp32(*values):
 
 #----------------------------------------------------------------------------
 # Encoder loss function .
-def E_loss(E, G, D, perceptual_model, reals, feature_scale=0.00005, D_scale=0.1, perceptual_img_size=256):
+def E_loss(E, G, D, perceptual_model, real_portraits, real_landmarks, feature_scale=0.00005, D_scale=0.1, perceptual_img_size=256):
+    reals = real_portraits
     num_layers, latent_dim = G.components.synthesis.input_shape[1:3]
     latent_w = E.get_output_for(reals, phase=True)
     latent_wp = tf.reshape(latent_w, [reals.shape[0], num_layers, latent_dim])
@@ -51,7 +52,9 @@ def E_loss(E, G, D, perceptual_model, reals, feature_scale=0.00005, D_scale=0.1,
 
 #----------------------------------------------------------------------------
 # Discriminator loss function.
-def D_logistic_simplegp(E, G, D, reals, r1_gamma=10.0):
+def D_logistic_simplegp(E, G, D, real_portraits, real_landmarks, r1_gamma=10.0):
+
+    reals = real_portraits # for now
 
     num_layers, latent_dim = G.components.synthesis.input_shape[1:3]
     latent_w = E.get_output_for(reals, phase=True)

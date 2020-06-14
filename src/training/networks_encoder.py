@@ -103,7 +103,7 @@ def residual_block_bn(inputs, fin, fout, phase, scope): #resnet v1
     return net
 
 
-def Encoder(input_img, size=128, filter=64, filter_max=512, num_layers=12, phase=True, **kwargs):
+def Encoder(input_img, input_landmarks, size=128, filter=64, filter_max=512, num_layers=12, phase=True, **kwargs):
     #print('using bn encoder phase: ', phase)
     s0 = 4
     num_blocks = int(np.log2(size / s0))
