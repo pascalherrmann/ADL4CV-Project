@@ -103,12 +103,16 @@ def residual_block_bn(inputs, fin, fout, phase, scope): #resnet v1
     return net
 
 
-def Encoder(input_img, size=128, filter=64, filter_max=512, num_layers=12, phase=True, **kwargs):
+def Encoder(input_img, input_landmarks, size=128, filter=64, filter_max=512, num_layers=12, phase=True, **kwargs):
     #print('using bn encoder phase: ', phase)
     s0 = 4
     num_blocks = int(np.log2(size / s0))
 
+    # define input shapes for the network
+    # todo: aktuell am imput img nix verändert!!!
     input_img.set_shape([None, 3, size, size])
+    input_landmarks.set_shape([None, 3, size, size])
+
     with tf.variable_scope('encoder'):
         with tf.variable_scope('input_image_stage'):
             net = conv2d(input_img, fmaps=filter, kernel=3, use_wscale=False)

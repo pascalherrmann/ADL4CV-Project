@@ -22,7 +22,7 @@ def process_reals(x, mirror_augment, drange_data, drange_net):
         with tf.name_scope('DynamicRange'):
             x = tf.cast(x, tf.float32)
             x = misc.adjust_dynamic_range(x, drange_data, drange_net)
-        if mirror_augment:
+        if False: #mirror_augment: #? deactivate for now
             with tf.name_scope('MirrorAugment'):
                 s = tf.shape(x)
                 mask = tf.random_uniform([s[0], 1, 1, 1], 0.0, 1.0)
@@ -30,49 +30,62 @@ def process_reals(x, mirror_augment, drange_data, drange_net):
                 x = tf.where(mask < 0.5, x, tf.reverse(x, axis=[3]))
         return x
 
-
+#
+# defines how a single example in is stored in the tfrecord
+# returns: single sample
+# in our case with updated dataset: output of shape [2, ..., ..., ...] -> stack
 def parse_tfrecord_tf(record):
     features = tf.parse_single_example(record, features={
         'shape': tf.FixedLenFeature([3], tf.int64),
-        'data': tf.FixedLenFeature([], tf.string)})
-    data = tf.decode_raw(features['data'], tf.uint8)
-    return tf.reshape(data, features['shape'])
+        'portrait': tf.FixedLenFeature([], tf.string),
+        'landmark': tf.FixedLenFeature([], tf.string)})
+    portrait = tf.decode_raw(features['portrait'], tf.uint8)
+    landmark = tf.decode_raw(features['landmark'], tf.uint8)
+    portrait = tf.reshape(portrait, (1, features['shape'][0], features['shape'][1], features['shape'][2]))
+    landmark = tf.reshape(landmark, (1, features['shape'][0], features['shape'][1], features['shape'][2]))
+    data = tf.concat((portrait, landmark), axis=0)
+    return data
 
 
+#
+# returns a batch of data
+# -> batch of stacks
 def get_train_data(sess, data_dir, submit_config, mode):
     if mode == 'train':
-        shuffle = True; repeat = True; batch_size = submit_config.batch_size
+        shuffle = False; repeat = True; batch_size = submit_config.batch_size #? set shuffle to false for now
     elif mode == 'test':
         shuffle = False; repeat = True; batch_size = submit_config.batch_size_test
     else:
         raise Exception("mode must in ['train', 'test'], but got {}" % mode)
 
     dset = tf.data.TFRecordDataset(data_dir)
-    dset = dset.map(parse_tfrecord_tf, num_parallel_calls=16)
+    dset = dset.map(parse_tfrecord_tf, num_parallel_calls=16) # we can still take the whole [2, ..., ..., ...] sample here
     if shuffle:
-        bytes_per_item = np.prod([3, submit_config.image_size, submit_config.image_size]) * np.dtype('uint8').itemsize
-        dset = dset.shuffle(((4096 << 20) - 1) // bytes_per_item + 1)
+        bytes_per_item = np.prod([2, 3, submit_config.image_size, submit_config.image_size]) * np.dtype('uint8').itemsize # 2x byte size!!!
+        dset = dset.shuffle(((4096 << 20) - 1) // bytes_per_item + 1) #?
     if repeat:
         dset = dset.repeat()
     dset = dset.batch(batch_size)
     train_iterator = tf.data.Iterator.from_structure(dset.output_types, dset.output_shapes)
     training_init_op = train_iterator.make_initializer(dset)
-    image_batch = train_iterator.get_next()
+    stack_batch = train_iterator.get_next()
     sess.run(training_init_op)
-    return image_batch
+    return stack_batch
 
 
-def test(E, Gs, real_test, submit_config):
+def test(E, Gs, real_portraits_test, real_landmarks_test, submit_config):
     with tf.name_scope("Run"), tf.control_dependencies(None):
         with tf.device("/cpu:0"):
-            in_split = tf.split(real_test, submit_config.num_gpus)
+            in_split_landmarks = tf.split(real_landmarks_test, num_or_size_splits=submit_config.num_gpus, axis=0)
+            in_split_portraits = tf.split(real_portraits_test, num_or_size_splits=submit_config.num_gpus, axis=0)
         out_split = []
         num_layers, latent_dim = Gs.components.synthesis.input_shape[1:3]
         for gpu in range(submit_config.num_gpus):
             with tf.device("/gpu:%d" % gpu):
-                in_gpu = in_split[gpu]
-                latent_w = E.get_output_for(in_gpu, phase=False)
-                latent_wp = tf.reshape(latent_w, [in_gpu.shape[0], num_layers, latent_dim])
+                in_landmarks_gpu = in_split_landmarks[gpu]
+                in_portraits_gpu = in_split_portraits[gpu]
+                latent_w = E.get_output_for(in_portraits_gpu, in_landmarks_gpu, phase=False)
+                latent_wp = tf.reshape(latent_w, [in_portraits_gpu.shape[0], num_layers, latent_dim])
                 fake_X_val = Gs.components.synthesis.get_output_for(latent_wp, randomize_noise=False)
                 out_split.append(fake_X_val)
 
@@ -105,21 +118,36 @@ def training_loop(
     tflib.init_tf(tf_config)
 
     with tf.name_scope('input'):
-        real_train = tf.placeholder(tf.float32, [submit_config.batch_size, 3, submit_config.image_size, submit_config.image_size], name='real_image_train')
-        real_test = tf.placeholder(tf.float32, [submit_config.batch_size_test, 3, submit_config.image_size, submit_config.image_size], name='real_image_test')
-        real_split = tf.split(real_train, num_or_size_splits=submit_config.num_gpus, axis=0)
+        placeholder_real_portraits_train = tf.placeholder(tf.float32, [submit_config.batch_size, 3, submit_config.image_size, submit_config.image_size], name='placeholder_real_portraits_train')
+        placeholder_real_landmarks_train = tf.placeholder(tf.float32, [submit_config.batch_size, 3, submit_config.image_size, submit_config.image_size], name='placeholder_real_landmarks_train')
+
+        placeholder_real_portraits_test = tf.placeholder(tf.float32, [submit_config.batch_size_test, 3, submit_config.image_size, submit_config.image_size], name='placeholder_real_portraits_test')
+        placeholder_real_landmarks_test = tf.placeholder(tf.float32, [submit_config.batch_size_test, 3, submit_config.image_size, submit_config.image_size], name='placeholder_real_landmarks_test')
+
+        real_split_landmarks = tf.split(placeholder_real_landmarks_train, num_or_size_splits=submit_config.num_gpus, axis=0)
+        real_split_portraits = tf.split(placeholder_real_portraits_train, num_or_size_splits=submit_config.num_gpus, axis=0)
 
     with tf.device('/gpu:0'):
         if resume_run_id is not None:
             network_pkl = misc.locate_network_pkl(resume_run_id, resume_snapshot)
             print('Loading networks from "%s"...' % network_pkl)
-            E, G, D, Gs = misc.load_pkl(network_pkl)
+            _E, _G, _D, _Gs = misc.load_pkl(network_pkl)
             start = int(network_pkl.split('-')[-1].split('.')[0]) // submit_config.batch_size
             print('Start: ', start)
         else:
             print('Constructing networks...')
-            G, D, Gs = misc.load_pkl(decoder_pkl.decoder_pkl)
+            G, D, Gs = misc.load_pkl(decoder_pkl.decoder_pkl) # don't use pre-trained discriminator!
             num_layers = Gs.components.synthesis.input_shape[1]
+
+            '''
+            # here we add a new discriminator!
+            D = tflib.Network('D',  # name of the network how we call it
+                              num_channels=training_set.shape[0], resolution=training_set.shape[1], label_size=training_set.label_size,  #some needed for this build function
+                              func_name="training.networks_stylegan.D_basic") # function of that network. more was not passed in d_args!
+                              # input is not passed here (just construction - note that we do not call the actual function!). Instead, network will inspect build function and require it for the get_output_for function.
+            print("Created new Discriminator!")
+            '''
+
             E = tflib.Network('E', size=submit_config.image_size, filter=64, filter_max=1024, num_layers=num_layers, phase=True, **Encoder_args)
             start = 0
 
@@ -145,13 +173,14 @@ def training_loop(
             D_gpu = D if gpu == 0 else D.clone(D.name + '_shadow')
             G_gpu = Gs if gpu == 0 else Gs.clone(Gs.name + '_shadow')
             perceptual_model = PerceptualModel(img_size=[E_loss_args.perceptual_img_size, E_loss_args.perceptual_img_size], multi_layers=False)
-            real_gpu = process_reals(real_split[gpu], mirror_augment, drange_data, drange_net)
+            real_portraits_gpu = process_reals(real_split_portraits[gpu], mirror_augment, drange_data, drange_net)
+            real_landmarks_gpu = process_reals(real_split_landmarks[gpu], mirror_augment, drange_data, drange_net)
             with tf.name_scope('E_loss'), tf.control_dependencies(None):
-                E_loss, recon_loss, adv_loss = dnnlib.util.call_func_by_name(E=E_gpu, G=G_gpu, D=D_gpu, perceptual_model=perceptual_model, reals=real_gpu, **E_loss_args)
+                E_loss, recon_loss, adv_loss = dnnlib.util.call_func_by_name(E=E_gpu, G=G_gpu, D=D_gpu, perceptual_model=perceptual_model, real_portraits=real_portraits_gpu, real_landmarks=real_landmarks_gpu,  **E_loss_args) # change signature in loss
                 E_loss_rec += recon_loss
                 E_loss_adv += adv_loss
             with tf.name_scope('D_loss'), tf.control_dependencies(None):
-                D_loss, loss_fake, loss_real, loss_gp = dnnlib.util.call_func_by_name(E=E_gpu, G=G_gpu, D=D_gpu, reals=real_gpu, **D_loss_args)
+                D_loss, loss_fake, loss_real, loss_gp = dnnlib.util.call_func_by_name(E=E_gpu, G=G_gpu, D=D_gpu, real_portraits=real_portraits_gpu, real_landmarks=real_landmarks_gpu, **D_loss_args) # change signature in ...
                 D_loss_real += loss_real
                 D_loss_fake += loss_fake
                 D_loss_grad += loss_gp
@@ -169,13 +198,14 @@ def training_loop(
     D_train_op = D_opt.apply_updates()
 
     print('building testing graph...')
-    fake_X_val = test(E, Gs, real_test, submit_config)
+    fake_X_val = test(E, Gs, placeholder_real_portraits_test, placeholder_real_landmarks_test, submit_config)
 
     sess = tf.get_default_session()
 
     print('Getting training data...')
-    image_batch_train = get_train_data(sess, data_dir=dataset_args.data_train, submit_config=submit_config, mode='train')
-    image_batch_test = get_train_data(sess, data_dir=dataset_args.data_test, submit_config=submit_config, mode='test')
+    # x_batch is a batch of (2, ..., ..., ...) records!
+    stack_batch_train = get_train_data(sess, data_dir=dataset_args.data_train, submit_config=submit_config, mode='train')
+    stack_batch_test = get_train_data(sess, data_dir=dataset_args.data_test, submit_config=submit_config, mode='test')
 
     summary_log = tf.summary.FileWriter(config.getGdrivePath())
 
@@ -193,10 +223,16 @@ def training_loop(
     print('Optimization starts!!!')
     
     
+    # here is the actual training loop: all iterations
     for it in range(start, max_iters):
 
-        batch_images = sess.run(image_batch_train)
-        feed_dict_1 = {real_train: batch_images}
+        batch_stacks = sess.run(stack_batch_train)
+        batch_portraits = batch_stacks[:,0,:,:,:]
+        batch_landmarks = batch_stacks[:,1,:,:,:]
+
+        feed_dict_1 = {placeholder_real_portraits_train: batch_portraits, placeholder_real_landmarks_train: batch_landmarks}
+
+        # here we query these encoder- and discriminator losses. as input we provide: batch_stacks = batch of images + landmarks.
         _, recon_, adv_ = sess.run([E_train_op, E_loss_rec, E_loss_adv], feed_dict_1)
         _, d_r_, d_f_, d_g_ = sess.run([D_train_op, D_loss_real, D_loss_fake, D_loss_grad], feed_dict_1)
 
@@ -212,12 +248,19 @@ def training_loop(
             
             
         if it % 500 == 0:
-            batch_images_test = sess.run(image_batch_test)
-            batch_images_test = misc.adjust_dynamic_range(batch_images_test.astype(np.float32), [0, 255], [-1., 1.])
-            samples2 = sess.run(fake_X_val, feed_dict={real_test: batch_images_test})
-            orin_recon = np.concatenate([batch_images_test, samples2], axis=0)
+            batch_stacks_test = sess.run(stack_batch_test)
+            batch_portraits_test = batch_stacks_test[:,0,:,:,:]
+            batch_landmarks_test = batch_stacks_test[:,1,:,:,:]
+
+            batch_portraits_test = misc.adjust_dynamic_range(batch_portraits_test.astype(np.float32), [0, 255], [-1., 1.])
+            batch_landmarks_test = misc.adjust_dynamic_range(batch_landmarks_test.astype(np.float32), [0, 255], [-1., 1.])
+
+
+            samples2 = sess.run(fake_X_val, feed_dict={placeholder_real_portraits_test: batch_portraits_test, placeholder_real_landmarks_test: batch_landmarks_test})
+
+            orin_recon = np.concatenate([batch_landmarks_test, batch_portraits_test, samples2], axis=0)
             orin_recon = adjust_pixel_range(orin_recon)
-            orin_recon = fuse_images(orin_recon, row=2, col=submit_config.batch_size_test)
+            orin_recon = fuse_images(orin_recon, row=3, col=submit_config.batch_size_test)
             # save image results during training, first row is original images and the second row is reconstructed images
             save_image('%s/iter_%08d.png' % (submit_config.run_dir, cur_nimg), orin_recon)
 
