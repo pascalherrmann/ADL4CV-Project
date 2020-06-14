@@ -85,7 +85,7 @@ def test(E, Gs, real_portraits_test, real_landmarks_test, submit_config):
                 in_landmarks_gpu = in_split_landmarks[gpu]
                 in_portraits_gpu = in_split_portraits[gpu]
                 latent_w = E.get_output_for(in_portraits_gpu, in_landmarks_gpu, phase=False)
-                latent_wp = tf.reshape(latent_w, [in_gpu.shape[0], num_layers, latent_dim])
+                latent_wp = tf.reshape(latent_w, [in_portraits_gpu.shape[0], num_layers, latent_dim])
                 fake_X_val = Gs.components.synthesis.get_output_for(latent_wp, randomize_noise=False)
                 out_split.append(fake_X_val)
 
@@ -198,7 +198,7 @@ def training_loop(
     D_train_op = D_opt.apply_updates()
 
     print('building testing graph...')
-    fake_X_val = test(E, Gs, placeholder_real_portraits_test, placeholder_real_landmarks_test submit_config)
+    fake_X_val = test(E, Gs, placeholder_real_portraits_test, placeholder_real_landmarks_test, submit_config)
 
     sess = tf.get_default_session()
 

@@ -108,7 +108,11 @@ def Encoder(input_img, input_landmarks, size=128, filter=64, filter_max=512, num
     s0 = 4
     num_blocks = int(np.log2(size / s0))
 
+    # define input shapes for the network
+    # todo: aktuell am imput img nix verändert!!!
     input_img.set_shape([None, 3, size, size])
+    input_landmarks.set_shape([None, 3, size, size])
+
     with tf.variable_scope('encoder'):
         with tf.variable_scope('input_image_stage'):
             net = conv2d(input_img, fmaps=filter, kernel=3, use_wscale=False)
