@@ -252,6 +252,9 @@ def training_loop(
             batch_portraits_test = batch_stacks_test[:,0,:,:,:]
             batch_landmarks_test = batch_stacks_test[:,1,:,:,:]
 
+            batch_landmarks_test = tf.math.reduce_mean(batch_landmarks_test, axis=1, keepdims=True, name="make_it_simple")
+
+
             batch_portraits_test = misc.adjust_dynamic_range(batch_portraits_test.astype(np.float32), [0, 255], [-1., 1.])
             batch_landmarks_test = misc.adjust_dynamic_range(batch_landmarks_test.astype(np.float32), [0, 255], [-1., 1.])
 
