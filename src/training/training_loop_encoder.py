@@ -83,6 +83,7 @@ def test(E, Gs, real_test, submit_config):
         with tf.device("/cpu:0"):
             in_split = tf.split(real_test, submit_config.num_gpus)
         out_split = []
+        random_samples_split = []
         num_layers, latent_dim = Gs.components.synthesis.input_shape[1:3]
         for gpu in range(submit_config.num_gpus):
             with tf.device("/gpu:%d" % gpu):
@@ -92,12 +93,15 @@ def test(E, Gs, real_test, submit_config):
                 latent_wp = tf.reshape(latent_w, [in_gpu.shape[0], num_layers, latent_dim])
                 latent_wp += latent_w_appearance
                 fake_X_val = Gs.components.synthesis.get_output_for(latent_wp, randomize_noise=False)
+                random_latent = Gs.components.synthesis.get_output_for(latent_w_appearance, randomize_noise=False)
+                random_samples_split.append(random_latent)
                 out_split.append(fake_X_val)
 
         with tf.device("/cpu:0"):
             out_expr = tf.concat(out_split, axis=0)
+            random_samples_expr = tf.concat(random_samples_split, axis=0)
 
-    return out_expr
+    return out_expr, random_samples_expr
 
 
 def training_loop(
@@ -223,7 +227,7 @@ def training_loop(
     D_train_op = D_opt.apply_updates()
 
     print('building testing graph...')
-    fake_X_val = test(E, Gs, real_test, submit_config)
+    fake_X_val, random_samples_val = test(E, Gs, real_test, submit_config)
 
     sess = tf.get_default_session()
 
@@ -292,7 +296,7 @@ def training_loop(
 
 
             samples2 = sess.run(fake_X_val, feed_dict={real_test: portrait_images_test, real_landmarks_test: landmark_images_test})
-            orin_recon = np.concatenate([landmark_images_test, samples2], axis=0) # bild: oben input, unten: reconstruct
+            orin_recon = np.concatenate([random_samples_val, landmark_images_test, samples2], axis=0) # bild: oben input, unten: reconstruct
             orin_recon = adjust_pixel_range(orin_recon)
             orin_recon = fuse_images(orin_recon, row=2, col=submit_config.batch_size_test)
             # save image results during training, first row is original images and the second row is reconstructed images
