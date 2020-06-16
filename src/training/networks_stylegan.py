@@ -567,6 +567,7 @@ def G_synthesis(
 
 def D_basic(
     images_in,                          # First input: Images [minibatch, channel, height, width].
+    landmarks_in,
     labels_in,                          # Second input: Labels [minibatch, label_size].
     num_channels        = 1,            # Number of input color channels. Overridden based on dataset.
     resolution          = 32,           # Input resolution. Overridden based on dataset.
@@ -593,11 +594,15 @@ def D_basic(
     act, gain = {'relu': (tf.nn.relu, np.sqrt(2)), 'lrelu': (leaky_relu, np.sqrt(2))}[nonlinearity]
 
     images_in.set_shape([None, num_channels, resolution, resolution])
+    landmarks_in.set_shape([None, 1, resolution, resolution])
     labels_in.set_shape([None, label_size])
     images_in = tf.cast(images_in, dtype)
+    landmarks_in = tf.cast(landmarks_in, dtype)
     labels_in = tf.cast(labels_in, dtype)
     lod_in = tf.cast(tf.get_variable('lod', initializer=np.float32(0.0), trainable=False), dtype)
     scores_out = None
+
+    input_concatenated = tf.concat((images_in, landmarks_in), axis=1) # [0: batch, 1: channels, 2,3: hw]
 
     # Building blocks.
     def fromrgb(x, res): # res = 2..resolution_log2
@@ -622,41 +627,10 @@ def D_basic(
             return x
 
     # Fixed structure: simple and efficient, but does not support progressive growing.
-    if structure == 'fixed':
-        x = fromrgb(images_in, resolution_log2)
-        for res in range(resolution_log2, 2, -1):
-            x = block(x, res)
-        scores_out = block(x, 2)
-
-    # Linear structure: simple but inefficient.
-    if structure == 'linear':
-        img = images_in
-        x = fromrgb(img, resolution_log2)
-        for res in range(resolution_log2, 2, -1):
-            lod = resolution_log2 - res
-            x = block(x, res)
-            img = downscale2d(img)
-            y = fromrgb(img, res - 1)
-            with tf.variable_scope('Grow_lod%d' % lod):
-                x = tflib.lerp_clip(x, y, lod_in - lod)
-        scores_out = block(x, 2)
-
-    # Recursive structure: complex but efficient.
-    if structure == 'recursive':
-        def cset(cur_lambda, new_cond, new_lambda):
-            return lambda: tf.cond(new_cond, new_lambda, cur_lambda)
-        def grow(res, lod):
-            x = lambda: fromrgb(downscale2d(images_in, 2**lod), res)
-            if lod > 0: x = cset(x, (lod_in < lod), lambda: grow(res + 1, lod - 1))
-            x = block(x(), res); y = lambda: x
-            if res > 2: y = cset(y, (lod_in > lod), lambda: tflib.lerp(x, fromrgb(downscale2d(images_in, 2**(lod+1)), res - 1), lod_in - lod))
-            return y()
-        scores_out = grow(2, resolution_log2 - 2)
-
-    # Label conditioning from "Which Training Methods for GANs do actually Converge?"
-    if label_size:
-        with tf.variable_scope('LabelSwitch'):
-            scores_out = tf.reduce_sum(scores_out * labels_in, axis=1, keepdims=True)
+    x = fromrgb(input_concatenated, resolution_log2)
+    for res in range(resolution_log2, 2, -1):
+        x = block(x, res)
+    scores_out = block(x, 2)
 
     assert scores_out.dtype == tf.as_dtype(dtype)
     scores_out = tf.identity(scores_out, name='scores_out')
