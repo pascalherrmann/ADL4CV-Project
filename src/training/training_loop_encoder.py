@@ -136,17 +136,15 @@ def training_loop(
             print('Start: ', start)
         else:
             print('Constructing networks...')
-            G, D, Gs = misc.load_pkl(decoder_pkl.decoder_pkl) # don't use pre-trained discriminator!
+            G, _, Gs = misc.load_pkl(decoder_pkl.decoder_pkl) # don't use pre-trained discriminator!
             num_layers = Gs.components.synthesis.input_shape[1]
 
-            '''
             # here we add a new discriminator!
             D = tflib.Network('D',  # name of the network how we call it
-                              num_channels=training_set.shape[0], resolution=training_set.shape[1], label_size=training_set.label_size,  #some needed for this build function
+                              num_channels=3, resolution=128, label_size=0,  #some needed for this build function
                               func_name="training.networks_stylegan.D_basic") # function of that network. more was not passed in d_args!
                               # input is not passed here (just construction - note that we do not call the actual function!). Instead, network will inspect build function and require it for the get_output_for function.
             print("Created new Discriminator!")
-            '''
 
             E = tflib.Network('E', size=submit_config.image_size, filter=64, filter_max=1024, num_layers=num_layers, phase=True, **Encoder_args)
             start = 0
