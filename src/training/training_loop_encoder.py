@@ -296,7 +296,8 @@ def training_loop(
 
 
             samples2 = sess.run(fake_X_val, feed_dict={real_test: portrait_images_test, real_landmarks_test: landmark_images_test})
-            orin_recon = np.concatenate([random_samples_val, landmark_images_test, samples2], axis=0) # bild: oben input, unten: reconstruct
+            random_sampled_images=sess.run(random_samples_val, feed_dict={real_test: portrait_images_test, real_landmarks_test: landmark_images_test})
+            orin_recon = np.concatenate([random_sampled_images, landmark_images_test, samples2], axis=0) # bild: oben input, unten: reconstruct
             orin_recon = adjust_pixel_range(orin_recon)
             orin_recon = fuse_images(orin_recon, row=2, col=submit_config.batch_size_test)
             # save image results during training, first row is original images and the second row is reconstructed images
