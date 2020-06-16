@@ -63,6 +63,7 @@ def main():
     kwargs.submit_config.run_dir_root = dnnlib.submission.submit.get_template_from_path(config.result_dir)
     kwargs.submit_config.run_dir_ignore += config.run_dir_ignore
     kwargs.submit_config.run_desc = desc
+    kwargs.submit_config.LOG_DIR = config.getGdrivePath()
 
     dnnlib.submit_run(**kwargs)
 
