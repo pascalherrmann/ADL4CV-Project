@@ -594,7 +594,7 @@ def D_basic(
     act, gain = {'relu': (tf.nn.relu, np.sqrt(2)), 'lrelu': (leaky_relu, np.sqrt(2))}[nonlinearity]
 
     images_in.set_shape([None, num_channels, resolution, resolution])
-    landmarks_in.set_shape([None, 1, resolution, resolution])
+    landmarks_in.set_shape([None, 3, resolution, resolution])
     labels_in.set_shape([None, label_size])
     images_in = tf.cast(images_in, dtype)
     landmarks_in = tf.cast(landmarks_in, dtype)
