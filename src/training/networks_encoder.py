@@ -111,7 +111,8 @@ def Encoder(input_img, input_landmarks, size=128, filter=64, filter_max=512, num
     # define input shapes for the network
     # todo: aktuell am imput img nix verändert!!!
     input_img.set_shape([None, 3, size, size])
-    input_landmarks.set_shape([None, 3, size, size])
+
+    input_landmarks.set_shape([None, 1, size, size])
 
     input_concatenated = tf.concat((input_img, input_landmarks), axis=1) # [0: batch, 1: channels, 2,3: hw]
 
