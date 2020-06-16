@@ -36,7 +36,7 @@ dataset = 'ffhq';           desc += '-ffhq';             train.mirror_augment = 
 z_dim = 512
 
 minibatch_per_gpu_train = {64: 32, 128: 16, 256: 16, 512: 8, 1024: 4}
-minibatch_per_gpu_test  = {64: 1, 128: 1, 256: 1, 512: 1, 1024: 1}
+minibatch_per_gpu_test  = {64: 8, 128: 4, 256: 2, 512: 1, 1024: 1}
 
 assert image_size in minibatch_per_gpu_train, 'Invalid image size'
 batch_size = minibatch_per_gpu_train.get(image_size) * num_gpus
