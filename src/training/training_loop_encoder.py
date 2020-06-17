@@ -239,7 +239,7 @@ def training_loop(
 
         # here we query these encoder- and discriminator losses. as input we provide: batch_stacks = batch of images + landmarks.
         _, recon_, adv_ = sess.run([E_train_op, E_loss_rec, E_loss_adv], feed_dict_1)
-        _, d_r_, d_f_, d_g_ = sess.run([D_train_op, D_loss_real, D_loss_fake, D_loss_grad], feed_dict_1)
+        _, d_r_, d_f_= sess.run([D_train_op, D_loss_real, D_loss_fake], feed_dict_1)
 
         cur_nimg += submit_config.batch_size
 
