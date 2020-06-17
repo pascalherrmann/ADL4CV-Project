@@ -99,6 +99,10 @@ def test(E, Gs, real_portraits_test, real_landmarks_test, submit_config):
 
     return out_expr
 
+def sample_random_portraits(Gs, batch_size):
+    random_portraits = Gs.get_output_for(np.random.randn(batch_size, 512), np.zeros((batch_size, 0)), is_training=False)
+    return random_portraits
+
 
 def training_loop(
                   submit_config,
@@ -128,7 +132,7 @@ def training_loop(
 
         placeholder_real_portraits_test = tf.placeholder(tf.float32, [submit_config.batch_size_test, 3, submit_config.image_size, submit_config.image_size], name='placeholder_real_portraits_test')
         placeholder_real_landmarks_test = tf.placeholder(tf.float32, [submit_config.batch_size_test, 3, submit_config.image_size, submit_config.image_size], name='placeholder_real_landmarks_test')
-
+        
         real_split_landmarks = tf.split(placeholder_real_landmarks_train, num_or_size_splits=submit_config.num_gpus, axis=0)
         real_split_portraits = tf.split(placeholder_real_portraits_train, num_or_size_splits=submit_config.num_gpus, axis=0)
 
@@ -202,6 +206,9 @@ def training_loop(
 
     print('building testing graph...')
     fake_X_val = test(E, Gs, placeholder_real_portraits_test, placeholder_real_landmarks_test, submit_config)
+    
+    sampled_portraits_val = sample_random_portraits(Gs, submit_config.batch_size)
+    sampled_portraits_val_test = sample_random_portraits(Gs, submit_config.batch_size_test)
 
     sess = tf.get_default_session()
 
@@ -233,8 +240,7 @@ def training_loop(
         #batch_portraits = batch_stacks[:,0,:,:,:]
         batch_landmarks = batch_stacks[:,1,:,:,:]
         
-        batch_portraits = Gs.get_output_for(np.random.randn(batch_landmarks.shape[0], 512), np.zeros((batch_landmarks.shape[0], 0)), is_training=False)
-        batch_portraits = sess.run([batch_portraits])[0]
+        batch_portraits = sess.run(sampled_portraits_val)
         
         batch_portraits = misc.adjust_dynamic_range(batch_portraits.astype(np.float32), [-1., 1.], [0, 255])
         #batch_landmarks = batch_landmarks.sum(axis=1, keepdims=True)
@@ -261,17 +267,15 @@ def training_loop(
             #batch_portraits_test = batch_stacks_test[:,0,:,:,:]
             batch_landmarks_test = batch_stacks_test[:,1,:,:,:]
             
-            batch_portraits_test = Gs.get_output_for(np.random.randn(batch_landmarks_test.shape[0], 512), np.zeros((batch_landmarks_test.shape[0], 0)), is_training=False)
-            batch_portraits_test = sess.run([batch_portraits_test])[0]
+            batch_portraits_test = sess.run(sampled_portraits_val_test)
             
             
-            batch_portraits_test_vis = batch_portraits_test#misc.adjust_dynamic_range(batch_portraits_test.astype(np.float32), [-1., 1.], [0, 255])
+            batch_portraits_test_vis = batch_portraits_test
             batch_landmarks_test_vis = misc.adjust_dynamic_range(batch_landmarks_test.astype(np.float32), [0, 255], [-1., 1.])
             #batch_landmarks_test = batch_landmarks_test.sum(axis=1, keepdims=True)
             #batch_landmarks_test = (batch_landmarks_test > 60)*255
             #landmarks_binary = batch_landmarks_test * np.ones(3, dtype=int)[None, :, None, None]
 
-            #batch_portraits_test = misc.adjust_dynamic_range(batch_portraits_test.astype(np.float32), [0, 255], [-1., 1.])
             batch_landmarks_test = misc.adjust_dynamic_range(batch_landmarks_test.astype(np.float32), [0, 255], [-1., 1.])
             #landmarks_binary_vis = misc.adjust_dynamic_range(landmarks_binary.astype(np.float32), [0, 255], [-1., 1.])
 
