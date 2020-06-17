@@ -235,6 +235,8 @@ def training_loop(
         
         batch_portraits = Gs.get_output_for(np.random.randn(batch_landmarks.shape[0], 512), np.zeros((batch_landmarks.shape[0], 0)), is_training=False)
         batch_portraits = sess.run([batch_portraits])[0]
+        
+        batch_portraits = misc.adjust_dynamic_range(batch_portraits.astype(np.float32), [-1., 1.], [0, 255])
         #batch_landmarks = batch_landmarks.sum(axis=1, keepdims=True)
         #batch_landmarks = (batch_landmarks > 60)*255
         feed_dict_1 = {placeholder_real_portraits_train: batch_portraits, placeholder_real_landmarks_train: batch_landmarks}
@@ -261,23 +263,22 @@ def training_loop(
             
             batch_portraits_test = Gs.get_output_for(np.random.randn(batch_landmarks_test.shape[0], 512), np.zeros((batch_landmarks_test.shape[0], 0)), is_training=False)
             batch_portraits_test = sess.run([batch_portraits_test])[0]
+            
+            
+            batch_portraits_test_vis = batch_portraits_test#misc.adjust_dynamic_range(batch_portraits_test.astype(np.float32), [-1., 1.], [0, 255])
             batch_landmarks_test_vis = misc.adjust_dynamic_range(batch_landmarks_test.astype(np.float32), [0, 255], [-1., 1.])
-
             #batch_landmarks_test = batch_landmarks_test.sum(axis=1, keepdims=True)
             #batch_landmarks_test = (batch_landmarks_test > 60)*255
             #landmarks_binary = batch_landmarks_test * np.ones(3, dtype=int)[None, :, None, None]
 
-
-
-
-            batch_portraits_test = misc.adjust_dynamic_range(batch_portraits_test.astype(np.float32), [0, 255], [-1., 1.])
+            #batch_portraits_test = misc.adjust_dynamic_range(batch_portraits_test.astype(np.float32), [0, 255], [-1., 1.])
             batch_landmarks_test = misc.adjust_dynamic_range(batch_landmarks_test.astype(np.float32), [0, 255], [-1., 1.])
             #landmarks_binary_vis = misc.adjust_dynamic_range(landmarks_binary.astype(np.float32), [0, 255], [-1., 1.])
 
 
             samples2 = sess.run(fake_X_val, feed_dict={placeholder_real_portraits_test: batch_portraits_test, placeholder_real_landmarks_test: batch_landmarks_test})
 
-            orin_recon = np.concatenate([batch_landmarks_test_vis, batch_portraits_test, samples2], axis=0)
+            orin_recon = np.concatenate([batch_landmarks_test_vis, batch_portraits_test_vis, samples2], axis=0)
             orin_recon = adjust_pixel_range(orin_recon)
             orin_recon = fuse_images(orin_recon, row=3, col=submit_config.batch_size_test)
             # save image results during training, first row is original images and the second row is reconstructed images
