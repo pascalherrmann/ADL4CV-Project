@@ -61,11 +61,11 @@ def get_train_data(sess, data_dir, submit_config, mode):
     #get list of all tfrecord files in the dataset folder
     records_path_list = os.listdir(path=data_dir)
     for i in range(len(records_path_list)):
-      records_path_list[i] = os.path.join(data_dir, records_path_list[i])
+        records_path_list[i] = os.path.join(data_dir, records_path_list[i])
 
     dset = tf.data.TFRecordDataset(records_path_list)
     dset = dset.map(parse_tfrecord_tf, num_parallel_calls=16) # we can still take the whole [2, ..., ..., ...] sample here
-    if shuffle:
+    if False: #shuffle:
         bytes_per_item = np.prod([2, 3, submit_config.image_size, submit_config.image_size]) * np.dtype('uint8').itemsize # 2x byte size!!!
         dset = dset.shuffle(((4096 << 20) - 1) // bytes_per_item + 1) #?
     if repeat:
@@ -141,17 +141,15 @@ def training_loop(
             print('Start: ', start)
         else:
             print('Constructing networks...')
-            G, D, Gs = misc.load_pkl(decoder_pkl.decoder_pkl) # don't use pre-trained discriminator!
+            G, _, Gs = misc.load_pkl(decoder_pkl.decoder_pkl) # don't use pre-trained discriminator!
             num_layers = Gs.components.synthesis.input_shape[1]
 
-            '''
             # here we add a new discriminator!
             D = tflib.Network('D',  # name of the network how we call it
-                              num_channels=training_set.shape[0], resolution=training_set.shape[1], label_size=training_set.label_size,  #some needed for this build function
+                              num_channels=3, resolution=128, label_size=0,  #some needed for this build function
                               func_name="training.networks_stylegan.D_basic") # function of that network. more was not passed in d_args!
                               # input is not passed here (just construction - note that we do not call the actual function!). Instead, network will inspect build function and require it for the get_output_for function.
             print("Created new Discriminator!")
-            '''
 
             E = tflib.Network('E', size=submit_config.image_size, filter=64, filter_max=1024, num_layers=num_layers, phase=True, **Encoder_args)
             start = 0
@@ -235,6 +233,8 @@ def training_loop(
         batch_portraits = batch_stacks[:,0,:,:,:]
         batch_landmarks = batch_stacks[:,1,:,:,:]
 
+        #batch_landmarks = batch_landmarks.sum(axis=1, keepdims=True)
+        #batch_landmarks = (batch_landmarks > 60)*255
         feed_dict_1 = {placeholder_real_portraits_train: batch_portraits, placeholder_real_landmarks_train: batch_landmarks}
 
         # here we query these encoder- and discriminator losses. as input we provide: batch_stacks = batch of images + landmarks.
@@ -256,14 +256,23 @@ def training_loop(
             batch_stacks_test = sess.run(stack_batch_test)
             batch_portraits_test = batch_stacks_test[:,0,:,:,:]
             batch_landmarks_test = batch_stacks_test[:,1,:,:,:]
+            batch_landmarks_test_vis = misc.adjust_dynamic_range(batch_landmarks_test.astype(np.float32), [0, 255], [-1., 1.])
+
+            #batch_landmarks_test = batch_landmarks_test.sum(axis=1, keepdims=True)
+            #batch_landmarks_test = (batch_landmarks_test > 60)*255
+            #landmarks_binary = batch_landmarks_test * np.ones(3, dtype=int)[None, :, None, None]
+
+
+
 
             batch_portraits_test = misc.adjust_dynamic_range(batch_portraits_test.astype(np.float32), [0, 255], [-1., 1.])
             batch_landmarks_test = misc.adjust_dynamic_range(batch_landmarks_test.astype(np.float32), [0, 255], [-1., 1.])
+            #landmarks_binary_vis = misc.adjust_dynamic_range(landmarks_binary.astype(np.float32), [0, 255], [-1., 1.])
 
 
             samples2 = sess.run(fake_X_val, feed_dict={placeholder_real_portraits_test: batch_portraits_test, placeholder_real_landmarks_test: batch_landmarks_test})
 
-            orin_recon = np.concatenate([batch_landmarks_test, batch_portraits_test, samples2], axis=0)
+            orin_recon = np.concatenate([batch_landmarks_test_vis, batch_portraits_test, samples2], axis=0)
             orin_recon = adjust_pixel_range(orin_recon)
             orin_recon = fuse_images(orin_recon, row=3, col=submit_config.batch_size_test)
             # save image results during training, first row is original images and the second row is reconstructed images
