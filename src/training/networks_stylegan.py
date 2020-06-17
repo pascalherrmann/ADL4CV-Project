@@ -161,11 +161,11 @@ def dense(x, fmaps, **kwargs):
 #----------------------------------------------------------------------------
 # Convolutional layer.
 
-def conv2d(x, fmaps, kernel, **kwargs):
-    assert kernel >= 1 and kernel % 2 == 1
+def conv2d(x, fmaps, kernel, stride=1, **kwargs):
+    #assert kernel >= 1 and kernel % 2 == 1
     w = get_weight([kernel, kernel, x.shape[1].value, fmaps], **kwargs)
     w = tf.cast(w, x.dtype)
-    return tf.nn.conv2d(x, w, strides=[1,1,1,1], padding='SAME', data_format='NCHW')
+    return tf.nn.conv2d(x, w, strides=[1,1,stride,stride], padding='SAME', data_format='NCHW')
 
 #----------------------------------------------------------------------------
 # Fused convolution + scaling.
@@ -567,10 +567,10 @@ def G_synthesis(
 
 def D_basic(
     images_in,                          # First input: Images [minibatch, channel, height, width].
-    landmarks_in,
-    labels_in,                          # Second input: Labels [minibatch, label_size].
+    landmarks_in,                       # Second input: Landmark Sketches [minibatch, channel, height, width].
+    labels_in,                          # Third input: Labels [minibatch, label_size].
     num_channels        = 1,            # Number of input color channels. Overridden based on dataset.
-    resolution          = 32,           # Input resolution. Overridden based on dataset.
+    resolution          = 32,           # Input resolution. Overridden in training_loop based on dataset or what we pass there (6).
     label_size          = 0,            # Dimensionality of the labels, 0 if no labels. Overridden based on dataset.
     fmap_base           = 8192,         # Overall multiplier for the number of feature maps.
     fmap_decay          = 1.0,          # log2 feature map reduction when doubling the resolution.
@@ -582,44 +582,55 @@ def D_basic(
     dtype               = 'float32',    # Data type to use for activations and outputs.
     fused_scale         = 'auto',       # True = fused convolution + scaling, False = separate ops, 'auto' = decide automatically.
     blur_filter         = [1,2,1],      # Low-pass filter to apply when resampling activations. None = no filtering.
-    structure           = 'auto',       # 'fixed' = no progressive growing, 'linear' = human-readable, 'recursive' = efficient, 'auto' = select automatically.
+    structure           = 'fixed',       # 'fixed' = no progressive growing, 'linear' = human-readable, 'recursive' = efficient, 'auto' = select automatically.
     is_template_graph   = False,        # True = template graph constructed by the Network class, False = actual evaluation.
     **_kwargs):                         # Ignore unrecognized keyword args.
 
+    # todo: man könnte auch direkt mit 6 channel arbeiten.
     resolution_log2 = int(np.log2(resolution))
     assert resolution == 2**resolution_log2 and resolution >= 4
     def nf(stage): return min(int(fmap_base / (2.0 ** (stage * fmap_decay))), fmap_max)
     def blur(x): return blur2d(x, blur_filter) if blur_filter else x
-    if structure == 'auto': structure = 'linear' if is_template_graph else 'recursive'
     act, gain = {'relu': (tf.nn.relu, np.sqrt(2)), 'lrelu': (leaky_relu, np.sqrt(2))}[nonlinearity]
 
+    num_channels = 3
     images_in.set_shape([None, num_channels, resolution, resolution])
-    landmarks_in.set_shape([None, 3, resolution, resolution])
+    landmarks_in.set_shape([None, num_channels, resolution, resolution])
+
+    d_input = tf.concat((images_in, landmarks_in), axis=1)
+
     labels_in.set_shape([None, label_size])
-    images_in = tf.cast(images_in, dtype)
-    landmarks_in = tf.cast(landmarks_in, dtype)
+
+    d_input = tf.cast(d_input, dtype)
     labels_in = tf.cast(labels_in, dtype)
+
     lod_in = tf.cast(tf.get_variable('lod', initializer=np.float32(0.0), trainable=False), dtype)
     scores_out = None
 
-    input_concatenated = tf.concat((images_in, landmarks_in), axis=1) # [0: batch, 1: channels, 2,3: hw]
+
 
     # Building blocks.
+
+    #
+    # fromrgb: layer that takes 3 channel-image as input, i.e., 1st layer in discriminator
+    # changes with progressive growing
+    #
     def fromrgb(x, res): # res = 2..resolution_log2
         with tf.variable_scope('FromRGB_lod%d' % (resolution_log2 - res)):
+            # input feature maps automatisch (hier. 6 statt 3). output featue maps werden agnegeben
             return act(apply_bias(conv2d(x, fmaps=nf(res-1), kernel=1, gain=gain, use_wscale=use_wscale)))
     def block(x, res): # res = 2..resolution_log2
         with tf.variable_scope('%dx%d' % (2**res, 2**res)):
             if res >= 3: # 8x8 and up
                 with tf.variable_scope('Conv0'):
-                    x = act(apply_bias(conv2d(x, fmaps=nf(res-1), kernel=3, gain=gain, use_wscale=use_wscale)))
+                    x = act(apply_bias(conv2d(x, fmaps=nf(res-1), kernel=4, stride=2, gain=gain, use_wscale=use_wscale)))
                 with tf.variable_scope('Conv1_down'):
                     x = act(apply_bias(conv2d_downscale2d(blur(x), fmaps=nf(res-2), kernel=3, gain=gain, use_wscale=use_wscale, fused_scale=fused_scale)))
-            else: # 4x4
+            else: # 4x4 i.e. res = 2
                 if mbstd_group_size > 1:
                     x = minibatch_stddev_layer(x, mbstd_group_size, mbstd_num_features)
                 with tf.variable_scope('Conv'):
-                    x = act(apply_bias(conv2d(x, fmaps=nf(res-1), kernel=3, gain=gain, use_wscale=use_wscale)))
+                    x = act(apply_bias(conv2d(x, fmaps=nf(res-1), kernel=4, stride=2, gain=gain, use_wscale=use_wscale)))
                 with tf.variable_scope('Dense0'):
                     x = act(apply_bias(dense(x, fmaps=nf(res-2), gain=gain, use_wscale=use_wscale)))
                 with tf.variable_scope('Dense1'):
@@ -627,10 +638,13 @@ def D_basic(
             return x
 
     # Fixed structure: simple and efficient, but does not support progressive growing.
-    x = fromrgb(input_concatenated, resolution_log2)
-    for res in range(resolution_log2, 2, -1):
+    x = d_input#fromrgb(d_input, resolution_log2)
+    for res in range(resolution_log2+1, 5, -1):
         x = block(x, res)
-    scores_out = block(x, 2)
+    scores_out = block(x, 2) # adds dense layers.
+
+    if label_size:
+        print("LABEL_SIZE=",label_size)
 
     assert scores_out.dtype == tf.as_dtype(dtype)
     scores_out = tf.identity(scores_out, name='scores_out')
