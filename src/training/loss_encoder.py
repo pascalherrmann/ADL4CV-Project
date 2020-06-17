@@ -23,7 +23,7 @@ def E_loss(E, G, D, perceptual_model, real_portraits, real_landmarks, feature_sc
     latent_w = E.get_output_for(reals, real_landmarks, phase=True)
     latent_wp = tf.reshape(latent_w, [reals.shape[0], num_layers, latent_dim])
     fake_X = G.components.synthesis.get_output_for(latent_wp, randomize_noise=False)
-    fake_scores_out = fp32(D.get_output_for(fake_X, real_landmarks))
+    fake_scores_out = fp32(D.get_output_for(fake_X, real_landmarks, None))
 
     with tf.variable_scope('recon_loss'):
         '''
@@ -60,8 +60,8 @@ def D_logistic_simplegp(E, G, D, real_portraits, real_landmarks, r1_gamma=10.0):
     latent_w = E.get_output_for(real_portraits, real_landmarks, phase=True)
     latent_wp = tf.reshape(latent_w, [real_portraits.shape[0], num_layers, latent_dim])
     fake_X = G.components.synthesis.get_output_for(latent_wp, randomize_noise=False)
-    real_scores_out = fp32(D.get_output_for(real_portraits, real_landmarks))
-    fake_scores_out = fp32(D.get_output_for(fake_X, real_landmarks))
+    real_scores_out = fp32(D.get_output_for(real_portraits, real_landmarks, None))
+    fake_scores_out = fp32(D.get_output_for(fake_X, real_landmarks, None))
     real_scores_out = autosummary('Loss/scores/real', real_scores_out)
     fake_scores_out = autosummary('Loss/scores/fake', fake_scores_out)
     
