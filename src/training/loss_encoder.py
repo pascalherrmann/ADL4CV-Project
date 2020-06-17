@@ -25,6 +25,7 @@ def E_loss(E, G, D, perceptual_model, real_portraits, real_landmarks, feature_sc
     fake_X = G.components.synthesis.get_output_for(latent_wp, randomize_noise=False)
     fake_scores_out = fp32(D.get_output_for(fake_X, None))
 
+    '''
     with tf.variable_scope('recon_loss'):
         vgg16_input_real = tf.transpose(reals, perm=[0, 2, 3, 1])
         vgg16_input_real = tf.image.resize_images(vgg16_input_real, size=[perceptual_img_size, perceptual_img_size], method=1)
@@ -40,27 +41,25 @@ def E_loss(E, G, D, perceptual_model, real_portraits, real_landmarks, feature_sc
         recon_loss_pixel = autosummary('Loss/scores/loss_pixel', recon_loss_pixel)
         recon_loss = recon_loss_pixel# + recon_loss_feats
         recon_loss = autosummary('Loss/scores/recon_loss', recon_loss)
-
+    '''
     with tf.variable_scope('adv_loss'):
         D_scale = autosummary('Loss/scores/d_scale', D_scale)
-        adv_loss = D_scale * tf.reduce_mean(tf.nn.softplus(-fake_scores_out))
+        adv_loss = tf.reduce_mean(tf.nn.softplus(-fake_scores_out))
         adv_loss = autosummary('Loss/scores/adv_loss', adv_loss)
 
-    loss = recon_loss + adv_loss
+    loss = adv_loss
 
-    return loss, recon_loss, adv_loss
+    return loss, -1.0, adv_loss
 
 #----------------------------------------------------------------------------
 # Discriminator loss function.
 def D_logistic_simplegp(E, G, D, real_portraits, real_landmarks, r1_gamma=10.0):
 
-    reals = real_portraits # for now
-
     num_layers, latent_dim = G.components.synthesis.input_shape[1:3]
-    latent_w = E.get_output_for(reals, real_portraits, phase=True)
-    latent_wp = tf.reshape(latent_w, [reals.shape[0], num_layers, latent_dim])
+    latent_w = E.get_output_for(real_portraits, real_landmarks, phase=True)
+    latent_wp = tf.reshape(latent_w, [real_portraits.shape[0], num_layers, latent_dim])
     fake_X = G.components.synthesis.get_output_for(latent_wp, randomize_noise=False)
-    real_scores_out = fp32(D.get_output_for(reals, None))
+    real_scores_out = fp32(D.get_output_for(real_portraits, None))
     fake_scores_out = fp32(D.get_output_for(fake_X, None))
     real_scores_out = autosummary('Loss/scores/real', real_scores_out)
     fake_scores_out = autosummary('Loss/scores/fake', fake_scores_out)
