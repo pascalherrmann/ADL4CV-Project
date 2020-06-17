@@ -100,7 +100,8 @@ def test(E, Gs, real_portraits_test, real_landmarks_test, submit_config):
     return out_expr
 
 def sample_random_portraits(Gs, batch_size):
-    random_portraits = Gs.get_output_for(np.random.randn(batch_size, 512), np.zeros((batch_size, 0)), is_training=False)
+    random_latent_z = tf.random.normal(shape=[batch_size, 512])
+    random_portraits = Gs.get_output_for(random_latent_z, np.zeros((batch_size, 0)), is_training=False)
     return random_portraits
 
 
