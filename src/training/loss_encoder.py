@@ -78,4 +78,4 @@ def D_logistic_simplegp(E, G, D, real_portraits, real_landmarks, r1_gamma=10.0):
         loss_gp = r1_penalty * (r1_gamma * 0.5)
     '''
     loss = loss_fake + loss_real# + loss_gp
-    return loss, loss_fake, loss_real, -1.0
+    return loss, loss_fake, loss_real, 0

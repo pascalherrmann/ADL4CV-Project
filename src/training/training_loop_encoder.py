@@ -186,7 +186,7 @@ def training_loop(
                 D_loss, loss_fake, loss_real, loss_gp = dnnlib.util.call_func_by_name(E=E_gpu, G=G_gpu, D=D_gpu, real_portraits=real_portraits_gpu, real_landmarks=real_landmarks_gpu, **D_loss_args) # change signature in ...
                 D_loss_real += loss_real
                 D_loss_fake += loss_fake
-                D_loss_grad += loss_gp
+                #D_loss_grad += loss_gp
             with tf.control_dependencies([add_global0]):
                 E_opt.register_gradients(E_loss, E_gpu.trainables)
                 D_opt.register_gradients(D_loss, D_gpu.trainables)
@@ -195,7 +195,7 @@ def training_loop(
     E_loss_adv /= submit_config.num_gpus
     D_loss_real /= submit_config.num_gpus
     D_loss_fake /= submit_config.num_gpus
-    D_loss_grad /= submit_config.num_gpus
+    #D_loss_grad /= submit_config.num_gpus
 
     E_train_op = E_opt.apply_updates()
     D_train_op = D_opt.apply_updates()
@@ -245,7 +245,7 @@ def training_loop(
 
         if it % 50 == 0:
             print('Iter: %06d recon_loss: %-6.4f adv_loss: %-6.4f d_r_loss: %-6.4f d_f_loss: %-6.4f d_reg: %-6.4f time:%-12s' % (
-                it, recon_, adv_, d_r_, d_f_, d_g_, dnnlib.util.format_time(time.time() - start_time)))
+                it, recon_, adv_, d_r_, d_f_, -1.0, dnnlib.util.format_time(time.time() - start_time)))
             sys.stdout.flush()
             tflib.autosummary.save_summaries(summary_log, it)
             
