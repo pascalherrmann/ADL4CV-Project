@@ -17,8 +17,8 @@ def fp32(*values):
 
 #----------------------------------------------------------------------------
 # Encoder loss function .
-def E_loss(E, G, D, perceptual_model, real_portraits, real_landmarks, feature_scale=0.00005, D_scale=0.1, perceptual_img_size=128):
-    reals = real_portraits
+def E_loss(E, G, D, perceptual_model, real_portraits, shuffled_portraits, real_landmarks, feature_scale=0.00005, D_scale=0.1, perceptual_img_size=256):
+    reals = shuffled_portraits
     num_layers, latent_dim = G.components.synthesis.input_shape[1:3]
     latent_w = E.get_output_for(reals, real_landmarks, phase=True)
     latent_wp = tf.reshape(latent_w, [reals.shape[0], num_layers, latent_dim])
@@ -26,7 +26,6 @@ def E_loss(E, G, D, perceptual_model, real_portraits, real_landmarks, feature_sc
     fake_scores_out = fp32(D.get_output_for(fake_X, real_landmarks, None))
     '''
     with tf.variable_scope('recon_loss'):
-        
         vgg16_input_real = tf.transpose(reals, perm=[0, 2, 3, 1])
         vgg16_input_real = tf.image.resize_images(vgg16_input_real, size=[perceptual_img_size, perceptual_img_size], method=1)
         vgg16_input_real = ((vgg16_input_real + 1) / 2) * 255
@@ -35,58 +34,46 @@ def E_loss(E, G, D, perceptual_model, real_portraits, real_landmarks, feature_sc
         vgg16_input_fake = ((vgg16_input_fake + 1) / 2) * 255
         vgg16_feature_real = perceptual_model(vgg16_input_real)
         vgg16_feature_fake = perceptual_model(vgg16_input_fake)
-        #recon_loss_feats = feature_scale * tf.reduce_mean(tf.square(vgg16_feature_real - vgg16_feature_fake))
-        recon_loss_feats = autosummary('Loss/scores/loss_feats', recon_loss_feats)
-
+        recon_loss_feats = feature_scale * tf.reduce_mean(tf.square(vgg16_feature_real - vgg16_feature_fake))
         recon_loss_pixel = tf.reduce_mean(tf.square(fake_X - reals))
+        recon_loss_feats = autosummary('Loss/scores/loss_feats', recon_loss_feats)
         recon_loss_pixel = autosummary('Loss/scores/loss_pixel', recon_loss_pixel)
-        recon_loss = recon_loss_pixel# + recon_loss_feats
+        recon_loss = recon_loss_feats + recon_loss_pixel
         recon_loss = autosummary('Loss/scores/recon_loss', recon_loss)
     '''
     with tf.variable_scope('adv_loss'):
         #D_scale = autosummary('Loss/scores/d_scale', D_scale)
         adv_loss = tf.reduce_mean(tf.nn.softplus(-fake_scores_out))
-        #adv_loss = autosummary('Loss/scores/adv_loss', adv_loss)
-        
-        autosummary('Loss/scores/adversarial',{
-        'encoder': adv_loss,
-        })
+        adv_loss = autosummary('Loss/scores/adv_loss', adv_loss)
 
-    loss = adv_loss
+    loss = adv_loss # + recon_loss
 
     return loss, 0, adv_loss
 
 #----------------------------------------------------------------------------
 # Discriminator loss function.
-def D_logistic_simplegp(E, G, D, real_portraits, real_landmarks, r1_gamma=10.0):
+def D_logistic_simplegp(E, G, D, real_portraits, shuffled_portraits, real_landmarks, r1_gamma=10.0):
 
     num_layers, latent_dim = G.components.synthesis.input_shape[1:3]
-    latent_w = E.get_output_for(real_portraits, real_landmarks, phase=True)
-    latent_wp = tf.reshape(latent_w, [real_portraits.shape[0], num_layers, latent_dim])
+    latent_w = E.get_output_for(shuffled_portraits, real_landmarks, phase=True)
+    latent_wp = tf.reshape(latent_w, [shuffled_portraits.shape[0], num_layers, latent_dim]) # make synthetic from shuffled ones!
     fake_X = G.components.synthesis.get_output_for(latent_wp, randomize_noise=False)
-    real_scores_out = fp32(D.get_output_for(real_portraits, real_landmarks, None))
-    fake_scores_out = fp32(D.get_output_for(fake_X, real_landmarks, None))
-    #real_scores_out = autosummary('Loss/scores/real', real_scores_out)
-    #fake_scores_out = autosummary('Loss/scores/fake', fake_scores_out)
+    real_scores_out = fp32(D.get_output_for(real_portraits, real_landmarks, None)) # real portraits, real landmarks
+    fake_scores_out = fp32(D.get_output_for(fake_X, real_landmarks, None)) # synthetic portaits, real landmarks
+
+    real_scores_out = autosummary('Loss/scores/real', real_scores_out)
+    fake_scores_out = autosummary('Loss/scores/fake', fake_scores_out)
     
     loss_fake = tf.reduce_mean(tf.nn.softplus(fake_scores_out))
     loss_real = tf.reduce_mean(tf.nn.softplus(-real_scores_out))
-    #loss_real = autosummary('Loss/scores/real', loss_real)
-    #loss_fake = autosummary('Loss/scores/fake', loss_fake)
-
+    loss_fake = autosummary('Loss/scores/loss_fake', loss_fake)
+    loss_real = autosummary('Loss/scores/loss_real', loss_real)
     '''
     with tf.name_scope('R1Penalty'):
-        real_grads = fp32(tf.gradients(real_scores_out, [reals])[0])
+        real_grads = fp32(tf.gradients(real_scores_out, [real_portraits])[0])
         r1_penalty = tf.reduce_mean(tf.reduce_sum(tf.square(real_grads), axis=[1, 2, 3]))
         r1_penalty = autosummary('Loss/r1_penalty', r1_penalty)
         loss_gp = r1_penalty * (r1_gamma * 0.5)
     '''
     loss = loss_fake + loss_real# + loss_gp
-    
-    autosummary('Loss/scores/adversarial',{
-        'discriminator': loss,
-        'discr_fake': loss_fake,
-        'discr_real': loss_real,
-    })
-    
     return loss, loss_fake, loss_real, 0
