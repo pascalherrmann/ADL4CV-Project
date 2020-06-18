@@ -86,19 +86,21 @@ def get_train_data(sess, data_dir, submit_config, mode):
     return stack_batch
 
 
-def test(E, Gs, real_portraits_test, real_landmarks_test, submit_config):
+def test(E, Gs, real_portraits_test, real_landmarks_test, real_shuffled_test, submit_config):
     with tf.name_scope("Run"), tf.control_dependencies(None):
         with tf.device("/cpu:0"):
             in_split_landmarks = tf.split(real_landmarks_test, num_or_size_splits=submit_config.num_gpus, axis=0)
             in_split_portraits = tf.split(real_portraits_test, num_or_size_splits=submit_config.num_gpus, axis=0)
+            in_split_shuffled = tf.split(real_shuffled_test, num_or_size_splits=submit_config.num_gpus, axis=0)
         out_split = []
         num_layers, latent_dim = Gs.components.synthesis.input_shape[1:3]
         for gpu in range(submit_config.num_gpus):
             with tf.device("/gpu:%d" % gpu):
                 in_landmarks_gpu = in_split_landmarks[gpu]
                 in_portraits_gpu = in_split_portraits[gpu]
-                latent_w = E.get_output_for(in_portraits_gpu, in_landmarks_gpu, phase=False)
-                latent_wp = tf.reshape(latent_w, [in_portraits_gpu.shape[0], num_layers, latent_dim])
+                in_shuffled_gpu = in_split_shuffled[gpu]
+                latent_w = E.get_output_for(in_shuffled_gpu, in_landmarks_gpu, phase=False)
+                latent_wp = tf.reshape(latent_w, [in_shuffled_gpu.shape[0], num_layers, latent_dim])
                 fake_X_val = Gs.components.synthesis.get_output_for(latent_wp, randomize_noise=False)
                 out_split.append(fake_X_val)
 
@@ -218,7 +220,7 @@ def training_loop(
     D_train_op = D_opt.apply_updates()
 
     print('building testing graph...')
-    fake_X_val = test(E, Gs, placeholder_real_portraits_test, placeholder_real_landmarks_test, submit_config)
+    fake_X_val = test(E, Gs, placeholder_real_portraits_test, placeholder_real_landmarks_test, placeholder_real_shuffled_test, submit_config)
     
     #sampled_portraits_val = sample_random_portraits(Gs, submit_config.batch_size)
     #sampled_portraits_val_test = sample_random_portraits(Gs, submit_config.batch_size_test)
@@ -288,7 +290,7 @@ def training_loop(
             batch_shuffled_test = batch_stacks_test_secondary[:,0,:,:,:]
             
             
-            batch_shuffled_test_vis = misc.adjust_dynamic_range(batch_portraits_test.astype(np.float32), [0, 255], [-1., 1.])
+            batch_shuffled_test_vis = misc.adjust_dynamic_range(batch_shuffled_test.astype(np.float32), [0, 255], [-1., 1.])
             batch_landmarks_test_vis = misc.adjust_dynamic_range(batch_landmarks_test.astype(np.float32), [0, 255], [-1., 1.])
             #batch_landmarks_test = batch_landmarks_test.sum(axis=1, keepdims=True)
             #batch_landmarks_test = (batch_landmarks_test > 60)*255
@@ -300,7 +302,7 @@ def training_loop(
             #landmarks_binary_vis = misc.adjust_dynamic_range(landmarks_binary.astype(np.float32), [0, 255], [-1., 1.])
 
 
-            samples2 = sess.run(fake_X_val, feed_dict={placeholder_real_portraits_test: batch_portraits_test, placeholder_real_landmarks_test: batch_landmarks_test, placeholder_real_shuffled_test:batch_shuffled_test})
+            samples2 = sess.run(fake_X_val, feed_dict={placeholder_real_portraits_test: batch_shuffled_test, placeholder_real_landmarks_test: batch_landmarks_test, placeholder_real_shuffled_test:batch_shuffled_test})
 
             orin_recon = np.concatenate([batch_landmarks_test_vis, batch_shuffled_test_vis, samples2], axis=0)
             orin_recon = adjust_pixel_range(orin_recon)
