@@ -46,7 +46,7 @@ def E_loss(E, G, D, perceptual_model, real_portraits, real_landmarks, feature_sc
         adv_loss = D_scale * tf.reduce_mean(tf.nn.softplus(-fake_scores_out))
         adv_loss = autosummary('Loss/scores/adv_loss', adv_loss)
 
-    loss = recon_loss + adv_loss
+    loss = adv_loss # + recon_loss
 
     return loss, recon_loss, adv_loss
 
