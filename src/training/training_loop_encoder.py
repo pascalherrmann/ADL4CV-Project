@@ -120,12 +120,15 @@ def training_loop(
     with tf.name_scope('input'):
         placeholder_real_portraits_train = tf.placeholder(tf.float32, [submit_config.batch_size, 3, submit_config.image_size, submit_config.image_size], name='placeholder_real_portraits_train')
         placeholder_real_landmarks_train = tf.placeholder(tf.float32, [submit_config.batch_size, 3, submit_config.image_size, submit_config.image_size], name='placeholder_real_landmarks_train')
+        placeholder_real_shuffled_train = tf.placeholder(tf.float32, [submit_config.batch_size, 3, submit_config.image_size, submit_config.image_size], name='placeholder_real_shuffled_train')
 
         placeholder_real_portraits_test = tf.placeholder(tf.float32, [submit_config.batch_size_test, 3, submit_config.image_size, submit_config.image_size], name='placeholder_real_portraits_test')
         placeholder_real_landmarks_test = tf.placeholder(tf.float32, [submit_config.batch_size_test, 3, submit_config.image_size, submit_config.image_size], name='placeholder_real_landmarks_test')
+        placeholder_real_shuffled_test = tf.placeholder(tf.float32, [submit_config.batch_size_test, 3, submit_config.image_size, submit_config.image_size], name='placeholder_real_shuffled_test')
 
         real_split_landmarks = tf.split(placeholder_real_landmarks_train, num_or_size_splits=submit_config.num_gpus, axis=0)
         real_split_portraits = tf.split(placeholder_real_portraits_train, num_or_size_splits=submit_config.num_gpus, axis=0)
+        real_split_shuffled = tf.split(placeholder_real_shuffled_train, num_or_size_splits=submit_config.num_gpus, axis=0)
 
     with tf.device('/gpu:0'):
         if resume_run_id is not None:
@@ -172,13 +175,14 @@ def training_loop(
             G_gpu = Gs if gpu == 0 else Gs.clone(Gs.name + '_shadow')
             perceptual_model = PerceptualModel(img_size=[E_loss_args.perceptual_img_size, E_loss_args.perceptual_img_size], multi_layers=False)
             real_portraits_gpu = process_reals(real_split_portraits[gpu], mirror_augment, drange_data, drange_net)
+            shuffled_portraits_gpu = process_reals(real_split_shuffled[gpu], mirror_augment, drange_data, drange_net)
             real_landmarks_gpu = process_reals(real_split_landmarks[gpu], mirror_augment, drange_data, drange_net)
             with tf.name_scope('E_loss'), tf.control_dependencies(None):
-                E_loss, recon_loss, adv_loss = dnnlib.util.call_func_by_name(E=E_gpu, G=G_gpu, D=D_gpu, perceptual_model=perceptual_model, real_portraits=real_portraits_gpu, real_landmarks=real_landmarks_gpu,  **E_loss_args) # change signature in loss
+                E_loss, recon_loss, adv_loss = dnnlib.util.call_func_by_name(E=E_gpu, G=G_gpu, D=D_gpu, perceptual_model=perceptual_model, real_portraits=real_portraits_gpu, shuffled_portraits=shuffled_portraits_gpu, real_landmarks=real_landmarks_gpu,  **E_loss_args) # change signature in loss
                 E_loss_rec += recon_loss
                 E_loss_adv += adv_loss
             with tf.name_scope('D_loss'), tf.control_dependencies(None):
-                D_loss, loss_fake, loss_real, loss_gp = dnnlib.util.call_func_by_name(E=E_gpu, G=G_gpu, D=D_gpu, real_portraits=real_portraits_gpu, real_landmarks=real_landmarks_gpu, **D_loss_args) # change signature in ...
+                D_loss, loss_fake, loss_real, loss_gp = dnnlib.util.call_func_by_name(E=E_gpu, G=G_gpu, D=D_gpu, real_portraits=real_portraits_gpu, shuffled_portraits=shuffled_portraits_gpu, real_landmarks=real_landmarks_gpu, **D_loss_args) # change signature in ...
                 D_loss_real += loss_real
                 D_loss_fake += loss_fake
                 D_loss_grad += loss_gp
@@ -228,12 +232,12 @@ def training_loop(
         batch_portraits = batch_stacks[:,0,:,:,:]
         batch_landmarks = batch_stacks[:,1,:,:,:]
 
-        np.random.shuffle(batch_portraits)
+        batch_shuffled = np.random.permutation(batch_portraits)
 
 
         #batch_landmarks = batch_landmarks.sum(axis=1, keepdims=True)
         #batch_landmarks = (batch_landmarks > 60)*255
-        feed_dict_1 = {placeholder_real_portraits_train: batch_portraits, placeholder_real_landmarks_train: batch_landmarks}
+        feed_dict_1 = {placeholder_real_portraits_train: batch_portraits, placeholder_real_landmarks_train: batch_landmarks, placeholder_real_shuffled_test=batch_shuffled}
 
         # here we query these encoder- and discriminator losses. as input we provide: batch_stacks = batch of images + landmarks.
         _, recon_, adv_ = sess.run([E_train_op, E_loss_rec, E_loss_adv], feed_dict_1)
@@ -263,16 +267,17 @@ def training_loop(
             #landmarks_binary = batch_landmarks_test * np.ones(3, dtype=int)[None, :, None, None]
 
 
-            np.random.shuffle(batch_portraits_test)
+            batch_shuffled_test = np.random.permutation(batch_portraits_test)
+
 
             batch_portraits_test = misc.adjust_dynamic_range(batch_portraits_test.astype(np.float32), [0, 255], [-1., 1.])
             batch_landmarks_test = misc.adjust_dynamic_range(batch_landmarks_test.astype(np.float32), [0, 255], [-1., 1.])
-            #landmarks_binary_vis = misc.adjust_dynamic_range(landmarks_binary.astype(np.float32), [0, 255], [-1., 1.])
+            batch_shuffled_test = misc.adjust_dynamic_range(batch_shuffled_test.astype(np.float32), [0, 255], [-1., 1.])
 
 
-            samples2 = sess.run(fake_X_val, feed_dict={placeholder_real_portraits_test: batch_portraits_test, placeholder_real_landmarks_test: batch_landmarks_test})
+            samples2 = sess.run(fake_X_val, feed_dict={placeholder_real_portraits_test: batch_portraits_test, placeholder_real_landmarks_test: batch_landmarks_test, placeholder_real_shuffled_test:batch_shuffled_test})
 
-            orin_recon = np.concatenate([batch_landmarks_test_vis, batch_portraits_test_vis, batch_portraits_test, samples2], axis=0)
+            orin_recon = np.concatenate([batch_landmarks_test_vis, batch_portraits_test, batch_shuffled_test, samples2], axis=0)
             orin_recon = adjust_pixel_range(orin_recon)
             orin_recon = fuse_images(orin_recon, row=3, col=submit_config.batch_size_test)
             # save image results during training, first row is original images and the second row is reconstructed images
