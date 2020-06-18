@@ -52,11 +52,15 @@ def parse_tfrecord_tf(record):
 # -> batch of stacks
 def get_train_data(sess, data_dir, submit_config, mode):
     if mode == 'train':
-        shuffle = False; repeat = True; batch_size = submit_config.batch_size #? set shuffle to false for now
+        shuffle = False; repeat = True; batch_size = submit_config.batch_size
     elif mode == 'test':
         shuffle = False; repeat = True; batch_size = submit_config.batch_size_test
+    if mode == 'train_secondary':
+        shuffle = True; repeat = True; batch_size = submit_config.batch_size
+    elif mode == 'test_secondary':
+        shuffle = True; repeat = True; batch_size = submit_config.batch_size_test
     else:
-        raise Exception("mode must in ['train', 'test'], but got {}" % mode)
+        raise Exception("mode must in ['train', 'test', 'train_secondary', 'test_secondary'], but got {}" % mode)
 
     #get list of all tfrecord files in the dataset folder
     records_path_list = os.listdir(path=data_dir)
@@ -65,7 +69,7 @@ def get_train_data(sess, data_dir, submit_config, mode):
 
     dset = tf.data.TFRecordDataset(records_path_list)
     dset = dset.map(parse_tfrecord_tf, num_parallel_calls=16) # we can still take the whole [2, ..., ..., ...] sample here
-    if False: #shuffle:
+    if shuffle:
         bytes_per_item = np.prod([2, 3, submit_config.image_size, submit_config.image_size]) * np.dtype('uint8').itemsize # 2x byte size!!!
         dset = dset.shuffle(((4096 << 20) - 1) // bytes_per_item + 1) #?
     if repeat:
@@ -208,8 +212,8 @@ def training_loop(
     print('building testing graph...')
     fake_X_val = test(E, Gs, placeholder_real_portraits_test, placeholder_real_landmarks_test, submit_config)
     
-    sampled_portraits_val = sample_random_portraits(Gs, submit_config.batch_size)
-    sampled_portraits_val_test = sample_random_portraits(Gs, submit_config.batch_size_test)
+    #sampled_portraits_val = sample_random_portraits(Gs, submit_config.batch_size)
+    #sampled_portraits_val_test = sample_random_portraits(Gs, submit_config.batch_size_test)
 
     sess = tf.get_default_session()
 
@@ -217,6 +221,9 @@ def training_loop(
     # x_batch is a batch of (2, ..., ..., ...) records!
     stack_batch_train = get_train_data(sess, data_dir=dataset_args.data_train, submit_config=submit_config, mode='train')
     stack_batch_test = get_train_data(sess, data_dir=dataset_args.data_test, submit_config=submit_config, mode='test')
+    
+    stack_batch_train_secondary = get_train_data(sess, data_dir=dataset_args.data_train, submit_config=submit_config, mode='train_secondary')
+    stack_batch_test_secondary = get_train_data(sess, data_dir=dataset_args.data_test, submit_config=submit_config, mode='test_secondary')
 
     summary_log = tf.summary.FileWriter(config.getGdrivePath())
 
@@ -241,9 +248,10 @@ def training_loop(
         #batch_portraits = batch_stacks[:,0,:,:,:]
         batch_landmarks = batch_stacks[:,1,:,:,:]
         
-        batch_portraits = sess.run(sampled_portraits_val)
+        batch_stacks_secondary = sess.run(stack_batch_train_secondary)
         
-        batch_portraits = misc.adjust_dynamic_range(batch_portraits.astype(np.float32), [-1., 1.], [0, 255])
+        batch_portraits = batch_stacks_secondary[:,0,:,:,:]
+        
         #batch_landmarks = batch_landmarks.sum(axis=1, keepdims=True)
         #batch_landmarks = (batch_landmarks > 60)*255
         feed_dict_1 = {placeholder_real_portraits_train: batch_portraits, placeholder_real_landmarks_train: batch_landmarks}
@@ -268,16 +276,18 @@ def training_loop(
             #batch_portraits_test = batch_stacks_test[:,0,:,:,:]
             batch_landmarks_test = batch_stacks_test[:,1,:,:,:]
             
-            batch_portraits_test = sess.run(sampled_portraits_val_test)
+            batch_stacks_test_secondary = sess.run(stack_batch_test_secondary)
+            batch_portraits_test = batch_stacks_test_secondary[:,0,:,:,:]
             
             
-            batch_portraits_test_vis = batch_portraits_test
+            batch_portraits_test_vis = misc.adjust_dynamic_range(batch_portraits_test.astype(np.float32), [0, 255], [-1., 1.])
             batch_landmarks_test_vis = misc.adjust_dynamic_range(batch_landmarks_test.astype(np.float32), [0, 255], [-1., 1.])
             #batch_landmarks_test = batch_landmarks_test.sum(axis=1, keepdims=True)
             #batch_landmarks_test = (batch_landmarks_test > 60)*255
             #landmarks_binary = batch_landmarks_test * np.ones(3, dtype=int)[None, :, None, None]
 
             batch_landmarks_test = misc.adjust_dynamic_range(batch_landmarks_test.astype(np.float32), [0, 255], [-1., 1.])
+            batch_portraits_test = misc.adjust_dynamic_range(batch_portraits_test.astype(np.float32), [0, 255], [-1., 1.])
             #landmarks_binary_vis = misc.adjust_dynamic_range(landmarks_binary.astype(np.float32), [0, 255], [-1., 1.])
 
 

@@ -46,7 +46,11 @@ def E_loss(E, G, D, perceptual_model, real_portraits, real_landmarks, feature_sc
     with tf.variable_scope('adv_loss'):
         #D_scale = autosummary('Loss/scores/d_scale', D_scale)
         adv_loss = tf.reduce_mean(tf.nn.softplus(-fake_scores_out))
-        adv_loss = autosummary('Loss/scores/adv_loss', adv_loss)
+        #adv_loss = autosummary('Loss/scores/adv_loss', adv_loss)
+        
+        autosummary('Loss/scores/adversarial',{
+        'encoder': adv_loss,
+        })
 
     loss = adv_loss
 
@@ -62,13 +66,13 @@ def D_logistic_simplegp(E, G, D, real_portraits, real_landmarks, r1_gamma=10.0):
     fake_X = G.components.synthesis.get_output_for(latent_wp, randomize_noise=False)
     real_scores_out = fp32(D.get_output_for(real_portraits, real_landmarks, None))
     fake_scores_out = fp32(D.get_output_for(fake_X, real_landmarks, None))
-    real_scores_out = autosummary('Loss/scores/real', real_scores_out)
-    fake_scores_out = autosummary('Loss/scores/fake', fake_scores_out)
+    #real_scores_out = autosummary('Loss/scores/real', real_scores_out)
+    #fake_scores_out = autosummary('Loss/scores/fake', fake_scores_out)
     
     loss_fake = tf.reduce_mean(tf.nn.softplus(fake_scores_out))
     loss_real = tf.reduce_mean(tf.nn.softplus(-real_scores_out))
-    loss_real = autosummary('Loss/scores/real', loss_real)
-    loss_fake = autosummary('Loss/scores/fake', loss_fake)
+    #loss_real = autosummary('Loss/scores/real', loss_real)
+    #loss_fake = autosummary('Loss/scores/fake', loss_fake)
 
     '''
     with tf.name_scope('R1Penalty'):
@@ -78,4 +82,11 @@ def D_logistic_simplegp(E, G, D, real_portraits, real_landmarks, r1_gamma=10.0):
         loss_gp = r1_penalty * (r1_gamma * 0.5)
     '''
     loss = loss_fake + loss_real# + loss_gp
+    
+    autosummary('Loss/scores/adversarial',{
+        'discriminator': loss,
+        'discr_fake': loss_fake,
+        'discr_real': loss_real,
+    })
+    
     return loss, loss_fake, loss_real, 0
