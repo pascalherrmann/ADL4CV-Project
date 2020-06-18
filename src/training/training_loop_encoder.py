@@ -134,7 +134,7 @@ def training_loop(
         if resume_run_id is not None:
             network_pkl = misc.locate_network_pkl(resume_run_id, resume_snapshot)
             print('Loading networks from "%s"...' % network_pkl)
-            _E, _G, _D, _Gs = misc.load_pkl(network_pkl)
+            E, G, D, Gs = misc.load_pkl(network_pkl)
             start = int(network_pkl.split('-')[-1].split('.')[0]) // submit_config.batch_size
             print('Start: ', start)
         else:
