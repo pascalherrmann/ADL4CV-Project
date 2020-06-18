@@ -228,15 +228,12 @@ def training_loop(
         batch_portraits = batch_stacks[:,0,:,:,:]
         batch_landmarks = batch_stacks[:,1,:,:,:]
 
-        indices = tf.range(start=0, limit=tf.shape(batch_portraits)[0], dtype=tf.int32)
-        shuffled_indices = tf.random.shuffle(indices)
-        shuffled_batch_portraits = tf.gather(batch_portraits, shuffled_indices)
-
+        np.random.shuffle(batch_portraits)
 
 
         #batch_landmarks = batch_landmarks.sum(axis=1, keepdims=True)
         #batch_landmarks = (batch_landmarks > 60)*255
-        feed_dict_1 = {placeholder_real_portraits_train: shuffled_batch_portraits, placeholder_real_landmarks_train: batch_landmarks}
+        feed_dict_1 = {placeholder_real_portraits_train: batch_portraits, placeholder_real_landmarks_train: batch_landmarks}
 
         # here we query these encoder- and discriminator losses. as input we provide: batch_stacks = batch of images + landmarks.
         _, recon_, adv_ = sess.run([E_train_op, E_loss_rec, E_loss_adv], feed_dict_1)
@@ -266,19 +263,16 @@ def training_loop(
             #landmarks_binary = batch_landmarks_test * np.ones(3, dtype=int)[None, :, None, None]
 
 
-            indices = tf.range(start=0, limit=tf.shape(batch_portraits_test)[0], dtype=tf.int32)
-            shuffled_indices = tf.random.shuffle(indices)
-            shuffled_batch_portraits_test = tf.gather(batch_portraits_test, shuffled_indices)
+            np.random.shuffle(batch_portraits_test)
 
-
-            shuffled_batch_portraits_test = misc.adjust_dynamic_range(shuffled_batch_portraits_test.astype(np.float32), [0, 255], [-1., 1.])
+            batch_portraits_test = misc.adjust_dynamic_range(batch_portraits_test.astype(np.float32), [0, 255], [-1., 1.])
             batch_landmarks_test = misc.adjust_dynamic_range(batch_landmarks_test.astype(np.float32), [0, 255], [-1., 1.])
             #landmarks_binary_vis = misc.adjust_dynamic_range(landmarks_binary.astype(np.float32), [0, 255], [-1., 1.])
 
 
-            samples2 = sess.run(fake_X_val, feed_dict={placeholder_real_portraits_test: shuffled_batch_portraits_test, placeholder_real_landmarks_test: batch_landmarks_test})
+            samples2 = sess.run(fake_X_val, feed_dict={placeholder_real_portraits_test: batch_portraits_test, placeholder_real_landmarks_test: batch_landmarks_test})
 
-            orin_recon = np.concatenate([batch_landmarks_test_vis, batch_portraits_test, shuffled_batch_portraits_test, samples2], axis=0)
+            orin_recon = np.concatenate([batch_landmarks_test_vis, batch_portraits_test_vis, batch_portraits_test, samples2], axis=0)
             orin_recon = adjust_pixel_range(orin_recon)
             orin_recon = fuse_images(orin_recon, row=3, col=submit_config.batch_size_test)
             # save image results during training, first row is original images and the second row is reconstructed images
