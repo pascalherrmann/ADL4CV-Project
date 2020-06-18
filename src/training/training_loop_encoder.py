@@ -222,8 +222,8 @@ def training_loop(
     print('building testing graph...')
     fake_X_val = test(E, Gs, placeholder_real_portraits_test, placeholder_real_landmarks_test, placeholder_real_shuffled_test, submit_config)
     
-    #sampled_portraits_val = sample_random_portraits(Gs, submit_config.batch_size)
-    #sampled_portraits_val_test = sample_random_portraits(Gs, submit_config.batch_size_test)
+    sampled_portraits_val = sample_random_portraits(Gs, submit_config.batch_size)
+    sampled_portraits_val_test = sample_random_portraits(Gs, submit_config.batch_size_test)
 
     sess = tf.get_default_session()
 
@@ -232,8 +232,8 @@ def training_loop(
     stack_batch_train = get_train_data(sess, data_dir=dataset_args.data_train, submit_config=submit_config, mode='train')
     stack_batch_test = get_train_data(sess, data_dir=dataset_args.data_test, submit_config=submit_config, mode='test')
     
-    stack_batch_train_secondary = get_train_data(sess, data_dir=dataset_args.data_train, submit_config=submit_config, mode='train_secondary')
-    stack_batch_test_secondary = get_train_data(sess, data_dir=dataset_args.data_test, submit_config=submit_config, mode='test_secondary')
+    #stack_batch_train_secondary = get_train_data(sess, data_dir=dataset_args.data_train, submit_config=submit_config, mode='train_secondary')
+    #stack_batch_test_secondary = get_train_data(sess, data_dir=dataset_args.data_test, submit_config=submit_config, mode='test_secondary')
 
     summary_log = tf.summary.FileWriter(config.getGdrivePath())
 
@@ -258,9 +258,13 @@ def training_loop(
         batch_portraits = batch_stacks[:,0,:,:,:]
         batch_landmarks = batch_stacks[:,1,:,:,:]
         
-        batch_stacks_secondary = sess.run(stack_batch_train_secondary)
+        batch_shuffled = sess.run(sampled_portraits_val)
         
-        batch_shuffled = batch_stacks_secondary[:,0,:,:,:]
+        batch_shuffled = misc.adjust_dynamic_range(batch_shuffled.astype(np.float32), [-1., 1.], [0, 255])
+        
+        #batch_stacks_secondary = sess.run(stack_batch_train_secondary)
+        
+        #batch_shuffled = batch_stacks_secondary[:,0,:,:,:]
         
         #batch_landmarks = batch_landmarks.sum(axis=1, keepdims=True)
         #batch_landmarks = (batch_landmarks > 60)*255
@@ -286,11 +290,14 @@ def training_loop(
             batch_portraits_test = batch_stacks_test[:,0,:,:,:]
             batch_landmarks_test = batch_stacks_test[:,1,:,:,:]
             
-            batch_stacks_test_secondary = sess.run(stack_batch_test_secondary)
-            batch_shuffled_test = batch_stacks_test_secondary[:,0,:,:,:]
+            batch_shuffled_test = sess.run(sampled_portraits_val_test)
+            
+            #batch_stacks_test_secondary = sess.run(stack_batch_test_secondary)
+            #batch_shuffled_test = batch_stacks_test_secondary[:,0,:,:,:]
             
             
-            batch_shuffled_test_vis = misc.adjust_dynamic_range(batch_shuffled_test.astype(np.float32), [0, 255], [-1., 1.])
+            #batch_shuffled_test_vis = misc.adjust_dynamic_range(batch_shuffled_test.astype(np.float32), [0, 255], [-1., 1.])
+            batch_shuffled_test_vis = batch_shuffled_test
             batch_landmarks_test_vis = misc.adjust_dynamic_range(batch_landmarks_test.astype(np.float32), [0, 255], [-1., 1.])
             #batch_landmarks_test = batch_landmarks_test.sum(axis=1, keepdims=True)
             #batch_landmarks_test = (batch_landmarks_test > 60)*255
@@ -298,7 +305,7 @@ def training_loop(
 
             batch_landmarks_test = misc.adjust_dynamic_range(batch_landmarks_test.astype(np.float32), [0, 255], [-1., 1.])
             batch_portraits_test = misc.adjust_dynamic_range(batch_portraits_test.astype(np.float32), [0, 255], [-1., 1.])
-            batch_shuffled_test = misc.adjust_dynamic_range(batch_shuffled_test.astype(np.float32), [0, 255], [-1., 1.])
+            #batch_shuffled_test = misc.adjust_dynamic_range(batch_shuffled_test.astype(np.float32), [0, 255], [-1., 1.])
             #landmarks_binary_vis = misc.adjust_dynamic_range(landmarks_binary.astype(np.float32), [0, 255], [-1., 1.])
 
 
