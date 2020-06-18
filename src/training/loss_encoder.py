@@ -24,7 +24,7 @@ def E_loss(E, G, D, perceptual_model, real_portraits, shuffled_portraits, real_l
     latent_wp = tf.reshape(latent_w, [reals.shape[0], num_layers, latent_dim])
     fake_X = G.components.synthesis.get_output_for(latent_wp, randomize_noise=False)
     fake_scores_out = fp32(D.get_output_for(fake_X, real_landmarks, None))
-
+    
     with tf.variable_scope('recon_loss'):
         vgg16_input_real = tf.transpose(reals, perm=[0, 2, 3, 1])
         vgg16_input_real = tf.image.resize_images(vgg16_input_real, size=[perceptual_img_size, perceptual_img_size], method=1)
@@ -43,7 +43,7 @@ def E_loss(E, G, D, perceptual_model, real_portraits, shuffled_portraits, real_l
 
     with tf.variable_scope('adv_loss'):
         D_scale = autosummary('Loss/scores/d_scale', D_scale)
-        adv_loss = D_scale * tf.reduce_mean(tf.nn.softplus(-fake_scores_out))
+        adv_loss = tf.reduce_mean(tf.nn.softplus(-fake_scores_out))
         adv_loss = autosummary('Loss/scores/adv_loss', adv_loss)
 
     loss = adv_loss # + recon_loss
@@ -65,6 +65,9 @@ def D_logistic_simplegp(E, G, D, real_portraits, shuffled_portraits, real_landma
     fake_scores_out = autosummary('Loss/scores/fake', fake_scores_out)
     loss_fake = tf.reduce_mean(tf.nn.softplus(fake_scores_out))
     loss_real = tf.reduce_mean(tf.nn.softplus(-real_scores_out))
+    
+    loss_real = autosummary('Loss/scores/real_loss', loss_real)
+    loss_fake = autosummary('Loss/scores/fake_loss', loss_fake)
 
     with tf.name_scope('R1Penalty'):
         real_grads = fp32(tf.gradients(real_scores_out, [real_portraits])[0])
