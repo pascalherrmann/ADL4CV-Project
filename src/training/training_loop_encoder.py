@@ -99,9 +99,19 @@ def test(E, Gs, real_portraits_test, real_landmarks_test, real_shuffled_test, su
                 in_landmarks_gpu = in_split_landmarks[gpu]
                 in_portraits_gpu = in_split_portraits[gpu]
                 in_shuffled_gpu = in_split_shuffled[gpu]
+                
+                #create images for non matching portraits and landmarks
                 latent_w = E.get_output_for(in_shuffled_gpu, in_landmarks_gpu, phase=False)
                 latent_wp = tf.reshape(latent_w, [in_shuffled_gpu.shape[0], num_layers, latent_dim])
                 fake_X_val = Gs.components.synthesis.get_output_for(latent_wp, randomize_noise=False)
+                
+                out_split.append(fake_X_val)
+                
+                #create images for matching portraits and landmarks
+                latent_w = E.get_output_for(in_portraits_gpu, in_landmarks_gpu, phase=False)
+                latent_wp = tf.reshape(latent_w, [in_portraits_gpu.shape[0], num_layers, latent_dim])
+                fake_X_val = Gs.components.synthesis.get_output_for(latent_wp, randomize_noise=False)
+                
                 out_split.append(fake_X_val)
 
         with tf.device("/cpu:0"):
@@ -149,7 +159,7 @@ def training_loop(
         real_split_portraits = tf.split(placeholder_real_portraits_train, num_or_size_splits=submit_config.num_gpus, axis=0)
         real_split_shuffled = tf.split(placeholder_real_shuffled_train, num_or_size_splits=submit_config.num_gpus, axis=0)
         
-        placeholder_training_flag = tf.placeholder(tf.string, [1], name='placeholder_training_flag')
+        placeholder_training_flag = tf.placeholder(tf.string, name='placeholder_training_flag')
 
     with tf.device('/gpu:0'):
         if resume_run_id is not None:
@@ -199,11 +209,11 @@ def training_loop(
             shuffled_portraits_gpu = process_reals(real_split_shuffled[gpu], mirror_augment, drange_data, drange_net)
             real_landmarks_gpu = process_reals(real_split_landmarks[gpu], mirror_augment, drange_data, drange_net)
             with tf.name_scope('E_loss'), tf.control_dependencies(None):
-                E_loss, recon_loss, adv_loss = dnnlib.util.call_func_by_name(E=E_gpu, G=G_gpu, D=D_gpu, perceptual_model=perceptual_model, real_portraits=real_portraits_gpu, shuffled_portraits=shuffled_portraits_gpu, real_landmarks=real_landmarks_gpu, placeholder_training_flag, **E_loss_args) # change signature in loss
+                E_loss, recon_loss, adv_loss = dnnlib.util.call_func_by_name(E=E_gpu, G=G_gpu, D=D_gpu, perceptual_model=perceptual_model, real_portraits=real_portraits_gpu, shuffled_portraits=shuffled_portraits_gpu, real_landmarks=real_landmarks_gpu, training_flag=placeholder_training_flag, **E_loss_args) # change signature in loss
                 E_loss_rec += recon_loss
                 E_loss_adv += adv_loss
             with tf.name_scope('D_loss'), tf.control_dependencies(None):
-                D_loss, loss_fake, loss_real, loss_gp = dnnlib.util.call_func_by_name(E=E_gpu, G=G_gpu, D=D_gpu, real_portraits=real_portraits_gpu, shuffled_portraits=shuffled_portraits_gpu, real_landmarks=real_landmarks_gpu, placeholder_training_flag, **D_loss_args) # change signature in ...
+                D_loss, loss_fake, loss_real, loss_gp = dnnlib.util.call_func_by_name(E=E_gpu, G=G_gpu, D=D_gpu, real_portraits=real_portraits_gpu, shuffled_portraits=shuffled_portraits_gpu, real_landmarks=real_landmarks_gpu, training_flag=placeholder_training_flag, **D_loss_args) # change signature in ...
                 D_loss_real += loss_real
                 D_loss_fake += loss_fake
                 D_loss_grad += loss_gp
@@ -266,14 +276,14 @@ def training_loop(
         feed_dict_1 = {placeholder_real_portraits_train: batch_portraits, placeholder_real_landmarks_train: batch_landmarks, placeholder_real_shuffled_train: batch_shuffled, placeholder_training_flag: training_flag}
 
         # here we query these encoder- and discriminator losses. as input we provide: batch_stacks = batch of images + landmarks.
-        _, adv_ = sess.run([E_train_op, E_loss_adv], feed_dict_1)
+        _, rec_, adv_ = sess.run([E_train_op, E_loss_adv], feed_dict_1)
         _, d_r_, d_f_, d_g_= sess.run([D_train_op, D_loss_real, D_loss_fake, D_loss_grad], feed_dict_1)
 
         cur_nimg += submit_config.batch_size
 
         if it % 50 == 0:
             print('Iter: %06d recon_loss: %-6.4f adv_loss: %-6.4f d_r_loss: %-6.4f d_f_loss: %-6.4f d_reg: %-6.4f time:%-12s' % (
-                it, -1.0, adv_, d_r_, d_f_, d_g_, dnnlib.util.format_time(time.time() - start_time)))
+                it, rec_, adv_, d_r_, d_f_, d_g_, dnnlib.util.format_time(time.time() - start_time)))
             sys.stdout.flush()
             tflib.autosummary.save_summaries(summary_log, it)
             
@@ -298,17 +308,19 @@ def training_loop(
             batch_shuffled_test = misc.adjust_dynamic_range(batch_shuffled_test.astype(np.float32), [0, 255], [-1., 1.])
 
 
-            samples2 = sess.run(fake_X_val, feed_dict={placeholder_real_portraits_test: batch_shuffled_test, placeholder_real_landmarks_test: batch_landmarks_test, placeholder_real_shuffled_test:batch_shuffled_test})
+            debug_samples = sess.run(fake_X_val, feed_dict={placeholder_real_portraits_test: batch_shuffled_test, placeholder_real_landmarks_test: batch_landmarks_test, placeholder_real_shuffled_test:batch_shuffled_test})
 
-            orin_recon = np.concatenate([batch_landmarks_test_vis, batch_shuffled_test_vis, samples2], axis=0)
-            orin_recon = adjust_pixel_range(orin_recon)
-            orin_recon = fuse_images(orin_recon, row=3, col=submit_config.batch_size_test)
+            debug_portraits = np.concatenate([batch_shuffled_test_vis, batch_portraits_test_vis], axis=0)
+            debug_landmarks = np.concatenate([batch_landmarks_test_vis, batch_landmarks_test_vis], axis=0)
+            debug_img = np.concatenate([debug_portraits, debug_landmarks, debug_samples], axis=0)
+            debug_img = adjust_pixel_range(debug_img)
+            debug_img = fuse_images(debug_img, row=3, col=submit_config.batch_size_test*2)
             # save image results during training, first row is original images and the second row is reconstructed images
-            save_image('%s/iter_%08d.png' % (submit_config.run_dir, cur_nimg), orin_recon)
+            save_image('%s/iter_%08d.png' % (submit_config.run_dir, cur_nimg), debug_img)
 
             # save image to gdrive
             img_path = os.path.join(config.getGdrivePath(), 'images', ('iter_%08d.png' % (cur_nimg)))
-            save_image(img_path, orin_recon)
+            save_image(img_path, debug_img)
 
         if cur_nimg >= tick_start_nimg + 65000:
             cur_tick += 1
