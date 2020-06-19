@@ -31,28 +31,20 @@ def E_loss(E, G, D, perceptual_model, real_portraits, shuffled_portraits, real_l
     fake_scores_out = fp32(D.get_output_for(fake_X, real_landmarks, None))
     
     with tf.variable_scope('recon_loss'):
-        if training_flag == 'appearance':
-            vgg16_input_real = tf.transpose(portraits, perm=[0, 2, 3, 1])
-            vgg16_input_real = tf.image.resize_images(vgg16_input_real, size=[perceptual_img_size, perceptual_img_size], method=1)
-            vgg16_input_real = ((vgg16_input_real + 1) / 2) * 255
-            vgg16_input_fake = tf.transpose(fake_X, perm=[0, 2, 3, 1])
-            vgg16_input_fake = tf.image.resize_images(vgg16_input_fake, size=[perceptual_img_size, perceptual_img_size], method=1)
-            vgg16_input_fake = ((vgg16_input_fake + 1) / 2) * 255
-            vgg16_feature_real = perceptual_model(vgg16_input_real)
-            vgg16_feature_fake = perceptual_model(vgg16_input_fake)
-            recon_loss_feats = feature_scale * tf.reduce_mean(tf.square(vgg16_feature_real - vgg16_feature_fake))
-            recon_loss_pixel = tf.reduce_mean(tf.square(fake_X - portraits))
-            recon_loss_feats = autosummary('Loss/scores/loss_feats', recon_loss_feats)
-            recon_loss_pixel = autosummary('Loss/scores/loss_pixel', recon_loss_pixel)
-            recon_loss = recon_loss_feats + recon_loss_pixel
-            recon_loss = autosummary('Loss/scores/recon_loss', recon_loss)
-        else:
-            recon_loss_feats = 0
-            recon_loss_pixel = 0
-            recon_loss = 0
-            recon_loss = autosummary('Loss/scores/recon_loss', recon_loss)
-            recon_loss_feats = autosummary('Loss/scores/loss_feats', recon_loss_feats)
-            recon_loss_pixel = autosummary('Loss/scores/loss_pixel', recon_loss_pixel)
+        vgg16_input_real = tf.transpose(portraits, perm=[0, 2, 3, 1])
+        vgg16_input_real = tf.image.resize_images(vgg16_input_real, size=[perceptual_img_size, perceptual_img_size], method=1)
+        vgg16_input_real = ((vgg16_input_real + 1) / 2) * 255
+        vgg16_input_fake = tf.transpose(fake_X, perm=[0, 2, 3, 1])
+        vgg16_input_fake = tf.image.resize_images(vgg16_input_fake, size=[perceptual_img_size, perceptual_img_size], method=1)
+        vgg16_input_fake = ((vgg16_input_fake + 1) / 2) * 255
+        vgg16_feature_real = perceptual_model(vgg16_input_real)
+        vgg16_feature_fake = perceptual_model(vgg16_input_fake)
+        recon_loss_feats = feature_scale * tf.reduce_mean(tf.square(vgg16_feature_real - vgg16_feature_fake))
+        recon_loss_pixel = tf.reduce_mean(tf.square(fake_X - portraits))
+        recon_loss_feats = autosummary('Loss/scores/loss_feats', recon_loss_feats)
+        recon_loss_pixel = autosummary('Loss/scores/loss_pixel', recon_loss_pixel)
+        recon_loss = recon_loss_feats + recon_loss_pixel
+        recon_loss = autosummary('Loss/scores/recon_loss', recon_loss)
 
     with tf.variable_scope('adv_loss'):
         adv_loss = tf.reduce_mean(tf.nn.softplus(-fake_scores_out))
