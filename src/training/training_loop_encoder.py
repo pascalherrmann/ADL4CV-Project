@@ -205,7 +205,7 @@ def training_loop(
                 D_loss, loss_fake, loss_real, loss_gp = dnnlib.util.call_func_by_name(E=E_gpu, G=G_gpu, D=D_gpu, real_portraits=real_portraits_gpu, shuffled_portraits=shuffled_portraits_gpu, real_landmarks=real_landmarks_gpu, **D_loss_args) # change signature in ...
                 D_loss_real += loss_real
                 D_loss_fake += loss_fake
-                #D_loss_grad += loss_gp
+                D_loss_grad += loss_gp
             with tf.control_dependencies([add_global0]):
                 E_opt.register_gradients(E_loss, E_gpu.trainables)
                 D_opt.register_gradients(D_loss, D_gpu.trainables)
@@ -214,7 +214,7 @@ def training_loop(
     E_loss_adv /= submit_config.num_gpus
     D_loss_real /= submit_config.num_gpus
     D_loss_fake /= submit_config.num_gpus
-    #D_loss_grad /= submit_config.num_gpus
+    D_loss_grad /= submit_config.num_gpus
 
     E_train_op = E_opt.apply_updates()
     D_train_op = D_opt.apply_updates()
@@ -262,19 +262,17 @@ def training_loop(
         
         batch_shuffled = batch_stacks_secondary[:,0,:,:,:]
         
-        #batch_landmarks = batch_landmarks.sum(axis=1, keepdims=True)
-        #batch_landmarks = (batch_landmarks > 60)*255
         feed_dict_1 = {placeholder_real_portraits_train: batch_portraits, placeholder_real_landmarks_train: batch_landmarks, placeholder_real_shuffled_train:batch_shuffled}
 
         # here we query these encoder- and discriminator losses. as input we provide: batch_stacks = batch of images + landmarks.
         _, adv_ = sess.run([E_train_op, E_loss_adv], feed_dict_1)
-        _, d_r_, d_f_= sess.run([D_train_op, D_loss_real, D_loss_fake], feed_dict_1)
+        _, d_r_, d_f_, d_g_= sess.run([D_train_op, D_loss_real, D_loss_fake, D_loss_grad], feed_dict_1)
 
         cur_nimg += submit_config.batch_size
 
         if it % 50 == 0:
             print('Iter: %06d recon_loss: %-6.4f adv_loss: %-6.4f d_r_loss: %-6.4f d_f_loss: %-6.4f d_reg: %-6.4f time:%-12s' % (
-                it, -1.0, adv_, d_r_, d_f_, -1.0, dnnlib.util.format_time(time.time() - start_time)))
+                it, -1.0, adv_, d_r_, d_f_, d_g_, dnnlib.util.format_time(time.time() - start_time)))
             sys.stdout.flush()
             tflib.autosummary.save_summaries(summary_log, it)
             
@@ -292,14 +290,11 @@ def training_loop(
             
             batch_shuffled_test_vis = misc.adjust_dynamic_range(batch_shuffled_test.astype(np.float32), [0, 255], [-1., 1.])
             batch_landmarks_test_vis = misc.adjust_dynamic_range(batch_landmarks_test.astype(np.float32), [0, 255], [-1., 1.])
-            #batch_landmarks_test = batch_landmarks_test.sum(axis=1, keepdims=True)
-            #batch_landmarks_test = (batch_landmarks_test > 60)*255
-            #landmarks_binary = batch_landmarks_test * np.ones(3, dtype=int)[None, :, None, None]
+            batch_portraits_test_vis = misc.adjust_dynamic_range(batch_portraits_test.astype(np.float32), [0, 255], [-1., 1.])
 
             batch_landmarks_test = misc.adjust_dynamic_range(batch_landmarks_test.astype(np.float32), [0, 255], [-1., 1.])
             batch_portraits_test = misc.adjust_dynamic_range(batch_portraits_test.astype(np.float32), [0, 255], [-1., 1.])
             batch_shuffled_test = misc.adjust_dynamic_range(batch_shuffled_test.astype(np.float32), [0, 255], [-1., 1.])
-            #landmarks_binary_vis = misc.adjust_dynamic_range(landmarks_binary.astype(np.float32), [0, 255], [-1., 1.])
 
 
             samples2 = sess.run(fake_X_val, feed_dict={placeholder_real_portraits_test: batch_shuffled_test, placeholder_real_landmarks_test: batch_landmarks_test, placeholder_real_shuffled_test:batch_shuffled_test})

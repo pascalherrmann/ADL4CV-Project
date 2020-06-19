@@ -42,8 +42,7 @@ def E_loss(E, G, D, perceptual_model, real_portraits, shuffled_portraits, real_l
         recon_loss = autosummary('Loss/scores/recon_loss', recon_loss)
     '''
     with tf.variable_scope('adv_loss'):
-        #D_scale = autosummary('Loss/scores/d_scale', D_scale)
-        adv_loss = tf.reduce_mean(tf.nn.softplus(-fake_scores_out))
+        adv_loss = tf.reduce_mean(tf.nn.softplus(-fake_scores_out))# * D_scale
         adv_loss = autosummary('Loss/scores/adv_loss', adv_loss)
 
     loss = adv_loss # + recon_loss
@@ -66,14 +65,15 @@ def D_logistic_simplegp(E, G, D, real_portraits, shuffled_portraits, real_landma
     
     loss_fake = tf.reduce_mean(tf.nn.softplus(fake_scores_out))
     loss_real = tf.reduce_mean(tf.nn.softplus(-real_scores_out))
+    
     loss_fake = autosummary('Loss/scores/loss_fake', loss_fake)
     loss_real = autosummary('Loss/scores/loss_real', loss_real)
-    '''
+
     with tf.name_scope('R1Penalty'):
         real_grads = fp32(tf.gradients(real_scores_out, [real_portraits])[0])
         r1_penalty = tf.reduce_mean(tf.reduce_sum(tf.square(real_grads), axis=[1, 2, 3]))
         r1_penalty = autosummary('Loss/r1_penalty', r1_penalty)
         loss_gp = r1_penalty * (r1_gamma * 0.5)
-    '''
-    loss = loss_fake + loss_real# + loss_gp
-    return loss, loss_fake, loss_real, 0
+
+    loss = loss_fake + loss_real + loss_gp
+    return loss, loss_fake, loss_real, loss_gp
