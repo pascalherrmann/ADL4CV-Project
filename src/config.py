@@ -23,8 +23,8 @@ run_dir_ignore = ['results', 'datasets', 'cache']
 RESOLUTION = 128
 DESC = ""
 
-DATA_DIR = "/content/gdrive/My Drive/Public/tensorboards_shared/dataset_tfrecords"
-TEST_DATA_DIR = "/content/gdrive/My Drive/Public/tensorboards_shared/dataset_tfrecords/dataset_tfrecords0-r07.tfrecords"
+DATA_DIR = "/content/gdrive/My Drive/Public/tensorboards_shared/split_dataset/train"
+TEST_DATA_DIR = "/content/gdrive/My Drive/Public/tensorboards_shared/split_dataset/test/dataset_tfrecords0-r07.tfrecords"
 PICKLE_DIR = "/content/gdrive/My Drive/Public/tensorboards_shared/Training_Decoder_TF/00000-sgan-ffhq128-1gpu/network-snapshot-011489.pkl"
 
 ENCODER_PICKLE_DIR = None
