@@ -52,13 +52,26 @@ def parse_tfrecord_tf(record):
 # -> batch of stacks
 def get_train_data(sess, data_dir, submit_config, mode):
     if mode == 'train':
-        shuffle = False; repeat = True; batch_size = submit_config.batch_size #? set shuffle to false for now
+        shuffle = False; repeat = True; batch_size = submit_config.batch_size
     elif mode == 'test':
         shuffle = False; repeat = True; batch_size = submit_config.batch_size_test
+    elif mode == 'train_secondary':
+        shuffle = True; repeat = True; batch_size = submit_config.batch_size
+    elif mode == 'test_secondary':
+        shuffle = True; repeat = True; batch_size = submit_config.batch_size_test
     else:
-        raise Exception("mode must in ['train', 'test'], but got {}" % mode)
+        raise Exception("mode must in ['train', 'test', 'train_secondary', 'test_secondary'], but got {}" % mode)
 
-    dset = tf.data.TFRecordDataset(data_dir)
+    if (mode == 'train') | (mode == 'train_secondary'):
+        #get list of all tfrecord files in the dataset folder
+        records_path_list = os.listdir(path=data_dir)
+        for i in range(len(records_path_list)):
+            records_path_list[i] = os.path.join(data_dir, records_path_list[i])
+    
+        dset = tf.data.TFRecordDataset(records_path_list)
+    else:
+        dset = tf.data.TFRecordDataset(data_dir)
+        
     dset = dset.map(parse_tfrecord_tf, num_parallel_calls=16) # we can still take the whole [2, ..., ..., ...] sample here
     if False: #shuffle:
         bytes_per_item = np.prod([2, 3, submit_config.image_size, submit_config.image_size]) * np.dtype('uint8').itemsize # 2x byte size!!!
@@ -73,12 +86,13 @@ def get_train_data(sess, data_dir, submit_config, mode):
     return stack_batch
 
 
-def test(E, Gs, real_portraits_test, real_shuffled_test, real_landmarks_test, submit_config):
+
+def test(E, Gs, real_portraits_test, real_landmarks_test, real_shuffled_test, submit_config):
     with tf.name_scope("Run"), tf.control_dependencies(None):
         with tf.device("/cpu:0"):
             in_split_landmarks = tf.split(real_landmarks_test, num_or_size_splits=submit_config.num_gpus, axis=0)
-            in_split_shuffled = tf.split(real_shuffled_test, num_or_size_splits=submit_config.num_gpus, axis=0)
             in_split_portraits = tf.split(real_portraits_test, num_or_size_splits=submit_config.num_gpus, axis=0)
+            in_split_shuffled = tf.split(real_shuffled_test, num_or_size_splits=submit_config.num_gpus, axis=0)
         out_split = []
         num_layers, latent_dim = Gs.components.synthesis.input_shape[1:3]
         for gpu in range(submit_config.num_gpus):
@@ -95,6 +109,11 @@ def test(E, Gs, real_portraits_test, real_shuffled_test, real_landmarks_test, su
             out_expr = tf.concat(out_split, axis=0)
 
     return out_expr
+
+def sample_random_portraits(Gs, batch_size):
+    random_latent_z = tf.random.normal(shape=[batch_size, 512])
+    random_portraits = Gs.get_output_for(random_latent_z, np.zeros((batch_size, 0)), is_training=False)
+    return random_portraits
 
 
 def training_loop(
@@ -203,7 +222,11 @@ def training_loop(
     D_train_op = D_opt.apply_updates()
 
     print('building testing graph...')
-    fake_X_val = test(E, Gs, placeholder_real_portraits_test, placeholder_real_shuffled_test, placeholder_real_landmarks_test, submit_config)
+
+    fake_X_val = test(E, Gs, placeholder_real_portraits_test, placeholder_real_landmarks_test, placeholder_real_shuffled_test, submit_config)
+    
+    #sampled_portraits_val = sample_random_portraits(Gs, submit_config.batch_size)
+    #sampled_portraits_val_test = sample_random_portraits(Gs, submit_config.batch_size_test)
 
     sess = tf.get_default_session()
 
@@ -211,6 +234,9 @@ def training_loop(
     # x_batch is a batch of (2, ..., ..., ...) records!
     stack_batch_train = get_train_data(sess, data_dir=dataset_args.data_train, submit_config=submit_config, mode='train')
     stack_batch_test = get_train_data(sess, data_dir=dataset_args.data_test, submit_config=submit_config, mode='test')
+    
+    stack_batch_train_secondary = get_train_data(sess, data_dir=dataset_args.data_train, submit_config=submit_config, mode='train_secondary')
+    stack_batch_test_secondary = get_train_data(sess, data_dir=dataset_args.data_test, submit_config=submit_config, mode='test_secondary')
 
     summary_log = tf.summary.FileWriter(config.getGdrivePath())
 
@@ -235,11 +261,10 @@ def training_loop(
         batch_portraits = batch_stacks[:,0,:,:,:]
         batch_landmarks = batch_stacks[:,1,:,:,:]
 
-        batch_shuffled = np.random.permutation(batch_portraits)
-
-
-        #batch_landmarks = batch_landmarks.sum(axis=1, keepdims=True)
-        #batch_landmarks = (batch_landmarks > 60)*255
+        # sample non-matching imgs
+        batch_stacks_secondary = sess.run(stack_batch_train_secondary)
+        batch_shuffled = batch_stacks_secondary[:,0,:,:,:]
+        
         feed_dict_1 = {placeholder_real_portraits_train: batch_portraits, placeholder_real_landmarks_train: batch_landmarks, placeholder_real_shuffled_train:batch_shuffled}
 
         # here we query these encoder- and discriminator losses. as input we provide: batch_stacks = batch of images + landmarks.
@@ -261,26 +286,23 @@ def training_loop(
             batch_stacks_test = sess.run(stack_batch_test)
             batch_portraits_test = batch_stacks_test[:,0,:,:,:]
             batch_landmarks_test = batch_stacks_test[:,1,:,:,:]
-
+            
+            batch_stacks_test_secondary = sess.run(stack_batch_test_secondary)
+            batch_shuffled_test = batch_stacks_test_secondary[:,0,:,:,:]
+            
+            
+            batch_shuffled_test_vis = misc.adjust_dynamic_range(batch_shuffled_test.astype(np.float32), [0, 255], [-1., 1.])
             batch_landmarks_test_vis = misc.adjust_dynamic_range(batch_landmarks_test.astype(np.float32), [0, 255], [-1., 1.])
             batch_portraits_test_vis = misc.adjust_dynamic_range(batch_portraits_test.astype(np.float32), [0, 255], [-1., 1.])
 
-            #batch_landmarks_test = batch_landmarks_test.sum(axis=1, keepdims=True)
-            #batch_landmarks_test = (batch_landmarks_test > 60)*255
-            #landmarks_binary = batch_landmarks_test * np.ones(3, dtype=int)[None, :, None, None]
-
-
-            batch_shuffled_test = np.random.permutation(batch_portraits_test)
-
-
-            batch_portraits_test = misc.adjust_dynamic_range(batch_portraits_test.astype(np.float32), [0, 255], [-1., 1.])
             batch_landmarks_test = misc.adjust_dynamic_range(batch_landmarks_test.astype(np.float32), [0, 255], [-1., 1.])
+            batch_portraits_test = misc.adjust_dynamic_range(batch_portraits_test.astype(np.float32), [0, 255], [-1., 1.])
             batch_shuffled_test = misc.adjust_dynamic_range(batch_shuffled_test.astype(np.float32), [0, 255], [-1., 1.])
 
+            # for test, we don't need to pass any correct faces!
+            samples2 = sess.run(fake_X_val, feed_dict={placeholder_real_portraits_test: batch_shuffled_test, placeholder_real_landmarks_test: batch_landmarks_test, placeholder_real_shuffled_test:batch_shuffled_test})
 
-            samples2 = sess.run(fake_X_val, feed_dict={placeholder_real_portraits_test: batch_portraits_test, placeholder_real_landmarks_test: batch_landmarks_test, placeholder_real_shuffled_test:batch_shuffled_test})
-
-            orin_recon = np.concatenate([batch_landmarks_test_vis, batch_portraits_test, batch_shuffled_test, samples2], axis=0)
+            orin_recon = np.concatenate([batch_landmarks_test_vis, batch_shuffled_test_vis, samples2], axis=0)
             orin_recon = adjust_pixel_range(orin_recon)
             orin_recon = fuse_images(orin_recon, row=3, col=submit_config.batch_size_test)
             # save image results during training, first row is original images and the second row is reconstructed images

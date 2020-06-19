@@ -96,6 +96,7 @@ class SubmitConfig(util.EasyDict):
         self.user_name = None
         self.task_name = None
         self.host_name = "localhost"
+        self.LOG_DIR = None
 
 
 def get_path_from_template(path_template: str, path_type: PathType = PathType.AUTO) -> str:
@@ -229,7 +230,7 @@ def run_wrapper(submit_config: SubmitConfig) -> None:
 
     # when running locally, redirect stderr to stdout, log stdout to a file, and force flushing
     if is_local:
-        logger = util.Logger(file_name=os.path.join(submit_config.run_dir, "log.txt"), file_mode="w", should_flush=True)
+        logger = util.Logger(file_name=os.path.join(submit_config.LOG_DIR, "log.txt"), file_mode="w", should_flush=True)
     else:  # when running in a cluster, redirect stderr to stdout, and just force flushing (log writing is handled by run.sh)
         logger = util.Logger(file_name=None, should_flush=True)
 
@@ -247,7 +248,7 @@ def run_wrapper(submit_config: SubmitConfig) -> None:
         else:
             traceback.print_exc()
 
-            log_src = os.path.join(submit_config.run_dir, "log.txt")
+            log_src = os.path.join(submit_config.LOG_DIR, "log.txt")
             log_dst = os.path.join(get_path_from_template(submit_config.run_dir_root), "{0}-error.txt".format(submit_config.run_name))
             shutil.copyfile(log_src, log_dst)
     finally:
@@ -267,6 +268,8 @@ def submit_run(submit_config: SubmitConfig, run_func_name: str, **run_func_kwarg
     if submit_config.user_name is None:
         submit_config.user_name = get_user_name()
 
+
+
     submit_config.run_func_name = run_func_name
     submit_config.run_func_kwargs = run_func_kwargs
 
@@ -277,6 +280,9 @@ def submit_run(submit_config: SubmitConfig, run_func_name: str, **run_func_kwarg
         submit_config.task_name = "{0}-{1:05d}-{2}".format(submit_config.user_name, submit_config.run_id, submit_config.run_desc)
         submit_config.run_dir = run_dir
         _populate_run_dir(run_dir, submit_config)
+
+    if not submit_config.LOG_DIR: # should be set in kwargs in train.py
+        submit_config.LOG_DIR = submit_config.run_dir
 
     if submit_config.print_info:
         print("\nSubmit config:\n")
