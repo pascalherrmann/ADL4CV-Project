@@ -114,7 +114,6 @@ def sample_random_portraits(Gs, batch_size):
     random_portraits = Gs.get_output_for(random_latent_z, np.zeros((batch_size, 0)), is_training=False)
     return random_portraits
 
-
 def training_loop(
                   submit_config,
                   Encoder_args            = {},
@@ -149,6 +148,8 @@ def training_loop(
         real_split_landmarks = tf.split(placeholder_real_landmarks_train, num_or_size_splits=submit_config.num_gpus, axis=0)
         real_split_portraits = tf.split(placeholder_real_portraits_train, num_or_size_splits=submit_config.num_gpus, axis=0)
         real_split_shuffled = tf.split(placeholder_real_shuffled_train, num_or_size_splits=submit_config.num_gpus, axis=0)
+        
+        placeholder_training_flag = tf.placeholder(tf.string, [1], name='placeholder_training_flag')
 
     with tf.device('/gpu:0'):
         if resume_run_id is not None:
@@ -198,11 +199,11 @@ def training_loop(
             shuffled_portraits_gpu = process_reals(real_split_shuffled[gpu], mirror_augment, drange_data, drange_net)
             real_landmarks_gpu = process_reals(real_split_landmarks[gpu], mirror_augment, drange_data, drange_net)
             with tf.name_scope('E_loss'), tf.control_dependencies(None):
-                E_loss, recon_loss, adv_loss = dnnlib.util.call_func_by_name(E=E_gpu, G=G_gpu, D=D_gpu, perceptual_model=perceptual_model, real_portraits=real_portraits_gpu, shuffled_portraits=shuffled_portraits_gpu, real_landmarks=real_landmarks_gpu,  **E_loss_args) # change signature in loss
-                #E_loss_rec += recon_loss
+                E_loss, recon_loss, adv_loss = dnnlib.util.call_func_by_name(E=E_gpu, G=G_gpu, D=D_gpu, perceptual_model=perceptual_model, real_portraits=real_portraits_gpu, shuffled_portraits=shuffled_portraits_gpu, real_landmarks=real_landmarks_gpu, placeholder_training_flag, **E_loss_args) # change signature in loss
+                E_loss_rec += recon_loss
                 E_loss_adv += adv_loss
             with tf.name_scope('D_loss'), tf.control_dependencies(None):
-                D_loss, loss_fake, loss_real, loss_gp = dnnlib.util.call_func_by_name(E=E_gpu, G=G_gpu, D=D_gpu, real_portraits=real_portraits_gpu, shuffled_portraits=shuffled_portraits_gpu, real_landmarks=real_landmarks_gpu, **D_loss_args) # change signature in ...
+                D_loss, loss_fake, loss_real, loss_gp = dnnlib.util.call_func_by_name(E=E_gpu, G=G_gpu, D=D_gpu, real_portraits=real_portraits_gpu, shuffled_portraits=shuffled_portraits_gpu, real_landmarks=real_landmarks_gpu, placeholder_training_flag, **D_loss_args) # change signature in ...
                 D_loss_real += loss_real
                 D_loss_fake += loss_fake
                 D_loss_grad += loss_gp
@@ -210,7 +211,7 @@ def training_loop(
                 E_opt.register_gradients(E_loss, E_gpu.trainables)
                 D_opt.register_gradients(D_loss, D_gpu.trainables)
 
-    #E_loss_rec /= submit_config.num_gpus
+    E_loss_rec /= submit_config.num_gpus
     E_loss_adv /= submit_config.num_gpus
     D_loss_real /= submit_config.num_gpus
     D_loss_fake /= submit_config.num_gpus
@@ -253,16 +254,16 @@ def training_loop(
     
     # here is the actual training loop: all iterations
     for it in range(start, max_iters):
-
         batch_stacks = sess.run(stack_batch_train)
         batch_portraits = batch_stacks[:,0,:,:,:]
         batch_landmarks = batch_stacks[:,1,:,:,:]
         
         batch_stacks_secondary = sess.run(stack_batch_train_secondary)
-        
         batch_shuffled = batch_stacks_secondary[:,0,:,:,:]
         
-        feed_dict_1 = {placeholder_real_portraits_train: batch_portraits, placeholder_real_landmarks_train: batch_landmarks, placeholder_real_shuffled_train:batch_shuffled}
+        training_flag = "appearance" if it % 2 == 0 else "pose"
+        
+        feed_dict_1 = {placeholder_real_portraits_train: batch_portraits, placeholder_real_landmarks_train: batch_landmarks, placeholder_real_shuffled_train: batch_shuffled, placeholder_training_flag: training_flag}
 
         # here we query these encoder- and discriminator losses. as input we provide: batch_stacks = batch of images + landmarks.
         _, adv_ = sess.run([E_train_op, E_loss_adv], feed_dict_1)
