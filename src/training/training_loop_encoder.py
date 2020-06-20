@@ -108,11 +108,11 @@ def test(E, Gs, real_portraits_test, real_landmarks_test, real_shuffled_test, su
                 out_split.append(fake_X_val)
                 
                 #create images for matching portraits and landmarks
-                latent_w = E.get_output_for(in_portraits_gpu, in_landmarks_gpu, phase=False)
-                latent_wp = tf.reshape(latent_w, [in_portraits_gpu.shape[0], num_layers, latent_dim])
-                fake_X_val = Gs.components.synthesis.get_output_for(latent_wp, randomize_noise=False)
+                latent_w_matching = E.get_output_for(in_portraits_gpu, in_landmarks_gpu, phase=False)
+                latent_wp_matching = tf.reshape(latent_w_matching, [in_portraits_gpu.shape[0], num_layers, latent_dim])
+                fake_X_val_matching = Gs.components.synthesis.get_output_for(latent_wp_matching, randomize_noise=False)
                 
-                out_split.append(fake_X_val)
+                out_split.append(fake_X_val_matching)
 
         with tf.device("/cpu:0"):
             out_expr = tf.concat(out_split, axis=0)
