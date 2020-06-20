@@ -18,13 +18,11 @@ def fp32(*values):
 #----------------------------------------------------------------------------
 # Encoder loss function .
 def E_loss(E, G, D, perceptual_model, real_portraits, shuffled_portraits, real_landmarks, training_mode, feature_scale=0.00005, D_scale=0.1, perceptual_img_size=256):
-
-    assert training_mode in ["appearance", "pose"]
-
-    if training_mode == "appearance":
-        reals = real_portraits
-    elif training_mode == "pose":
-        reals = shuffled_portraits
+        
+    reals = tf.case(
+                [(tf.math.equal(training_mode, "appearance"), lambda: real_portraits), 
+                 (tf.math.equal(training_mode, "pose"), lambda: shuffled_portraits)],
+                  default = lambda: real_portraits*0, exclusive=True)
 
     num_layers, latent_dim = G.components.synthesis.input_shape[1:3]
     latent_w = E.get_output_for(reals, real_landmarks, phase=True)
@@ -52,9 +50,11 @@ def E_loss(E, G, D, perceptual_model, real_portraits, shuffled_portraits, real_l
         D_scale = autosummary('Loss/scores/d_scale', D_scale)
         adv_loss = D_scale * tf.reduce_mean(tf.nn.softplus(-fake_scores_out))
         adv_loss = autosummary('Loss/scores/adv_loss', adv_loss)
-
-    loss = adv_loss
-    if training_mode == "appearance": loss += recon_loss
+        
+    loss = tf.case(
+                [(tf.math.equal(training_mode, "appearance"), lambda: adv_loss), 
+                 (tf.math.equal(training_mode, "pose"), lambda: adv_loss + recon_loss)],
+                  default = lambda: adv_loss*0, exclusive=True)
 
     return loss, recon_loss, adv_loss
 
@@ -62,14 +62,12 @@ def E_loss(E, G, D, perceptual_model, real_portraits, shuffled_portraits, real_l
 # Discriminator loss function.
 def D_logistic_simplegp(E, G, D, real_portraits, shuffled_portraits, real_landmarks, training_mode, r1_gamma=10.0):
 
-    assert training_mode in ["appearance", "pose"]
-
     num_layers, latent_dim = G.components.synthesis.input_shape[1:3]
 
-    if training_mode == "appearance":
-        portraits = real_portraits
-    else:
-        portraits = shuffled_portraits
+    portraits = tf.case(
+                [(tf.math.equal(training_mode, "appearance"), lambda: real_portraits), 
+                 (tf.math.equal(training_mode, "pose"), lambda: shuffled_portraits)],
+                  default = lambda: real_portraits*0, exclusive=True)
 
     latent_w = E.get_output_for(portraits, real_landmarks, phase=True)
     latent_wp = tf.reshape(latent_w, [portraits.shape[0], num_layers, latent_dim]) # make synthetic from shuffled ones!
