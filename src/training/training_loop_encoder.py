@@ -242,8 +242,7 @@ def training_loop(
         batch_portraits = batch_stacks[:,0,:,:,:]
         batch_landmarks = batch_stacks[:,1,:,:,:]
 
-        batch_shuffled = np.random.permutation(batch_portraits)
-
+        batch_shuffled = np.roll(batch_portraits, axis=0, shift = 1)
 
         #batch_landmarks = batch_landmarks.sum(axis=1, keepdims=True)
         #batch_landmarks = (batch_landmarks > 60)*255
@@ -277,7 +276,7 @@ def training_loop(
             #landmarks_binary = batch_landmarks_test * np.ones(3, dtype=int)[None, :, None, None]
 
 
-            batch_shuffled_test = np.random.permutation(batch_portraits_test)
+            batch_shuffled_test = np.roll(batch_portraits_test, axis=0, shift = 1)
 
 
             batch_portraits_test = misc.adjust_dynamic_range(batch_portraits_test.astype(np.float32), [0, 255], [-1., 1.])
