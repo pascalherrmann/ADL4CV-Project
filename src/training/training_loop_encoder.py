@@ -285,9 +285,9 @@ def training_loop(
             batch_shuffled_test = misc.adjust_dynamic_range(batch_shuffled_test.astype(np.float32), [0, 255], [-1., 1.])
 
 
-            samples_matching = sess.run(fake_X_val, feed_dict={placeholder_real_portraits_test: batch_portraits_test, placeholder_real_landmarks_test: batch_landmarks_test, placeholder_real_shuffled_test:batch_shuffled_test})
+            samples_matching = sess.run(fake_X_val, feed_dict={placeholder_real_portraits_test: batch_portraits_test, placeholder_real_landmarks_test: batch_landmarks_test, placeholder_real_shuffled_test:batch_shuffled_test, placeholder_training_mode:"appearance"})
 
-            samples_not_matching = sess.run(fake_X_val, feed_dict={placeholder_real_portraits_test: batch_portraits_test, placeholder_real_landmarks_test: batch_landmarks_test, placeholder_real_shuffled_test:batch_shuffled_test})
+            samples_not_matching = sess.run(fake_X_val, feed_dict={placeholder_real_portraits_test: batch_portraits_test, placeholder_real_landmarks_test: batch_landmarks_test, placeholder_real_shuffled_test:batch_shuffled_test, placeholder_training_mode:"pose"})
 
 
             orin_recon = np.concatenate([batch_landmarks_test_vis, batch_portraits_test, samples_matching, batch_shuffled_test, samples_not_matching], axis=0)
