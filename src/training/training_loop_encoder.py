@@ -308,7 +308,7 @@ def training_loop(
             batch_shuffled_test = misc.adjust_dynamic_range(batch_shuffled_test.astype(np.float32), [0, 255], [-1., 1.])
 
 
-            debug_samples = sess.run(fake_X_val, feed_dict={placeholder_real_portraits_test: batch_shuffled_test, placeholder_real_landmarks_test: batch_landmarks_test, placeholder_real_shuffled_test:batch_shuffled_test})
+            debug_samples = sess.run(fake_X_val, feed_dict={placeholder_real_portraits_test: batch_portraits_test, placeholder_real_landmarks_test: batch_landmarks_test, placeholder_real_shuffled_test:batch_shuffled_test})
 
             debug_portraits = np.concatenate([batch_shuffled_test_vis, batch_portraits_test_vis], axis=0)
             debug_landmarks = np.concatenate([batch_landmarks_test_vis, batch_landmarks_test_vis], axis=0)
