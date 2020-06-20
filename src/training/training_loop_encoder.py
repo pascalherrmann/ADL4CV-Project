@@ -271,7 +271,7 @@ def training_loop(
         batch_stacks_secondary = sess.run(stack_batch_train_secondary)
         batch_shuffled = batch_stacks_secondary[:,0,:,:,:]
         
-        training_flag = "appearance" if it % 2 == 0 else "pose"
+        training_flag = "pose" if it % 4 == 0 else "appearance"
         
         feed_dict_1 = {placeholder_real_portraits_train: batch_portraits, placeholder_real_landmarks_train: batch_landmarks, placeholder_real_shuffled_train: batch_shuffled, placeholder_training_flag: training_flag}
 
