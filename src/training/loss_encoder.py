@@ -18,7 +18,6 @@ def fp32(*values):
 #----------------------------------------------------------------------------
 # Encoder loss function .
 def E_loss(E, G, D, perceptual_model, real_portraits, shuffled_portraits, real_landmarks, training_flag, feature_scale=0.00005, D_scale=0.1, perceptual_img_size=256):
-    
     if training_flag == 'appearance':
         portraits = real_portraits
     else:
@@ -53,7 +52,7 @@ def E_loss(E, G, D, perceptual_model, real_portraits, shuffled_portraits, real_l
     if training_flag == 'appearance':
         loss = adv_loss * D_scale  + recon_loss
     else:
-        loss = adv_loss
+        loss = adv_loss * D_scale
 
     return loss, recon_loss, adv_loss
 
