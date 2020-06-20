@@ -28,8 +28,8 @@ def feedthrough_debug(input_value, flag_value):
 # Encoder loss function .
 def E_loss(E, G, D, perceptual_model, real_portraits, shuffled_portraits, real_landmarks, training_flag, feature_scale=0.00005, D_scale=0.1, perceptual_img_size=256):
     
-    portraits = tf.cond(tf.constant(training_flag == 'appearance', dtype=tf.bool), lambda: feedthrough(real_portraits), lambda: feedthrough(shuffled_portraits))
-    #portraits = tf.cond(tf.constant(training_flag == 'appearance', dtype=tf.bool), lambda: feedthrough_debug(real_portraits, True), lambda: feedthrough_debug(shuffled_portraits, False))
+    portraits = tf.cond(tf.math.equal(training_flag, 'appearance'), lambda: feedthrough(real_portraits), lambda: feedthrough(shuffled_portraits))
+    #portraits = tf.cond(tf.math.equal(training_flag, 'appearance'), lambda: feedthrough_debug(real_portraits, True), lambda: feedthrough_debug(shuffled_portraits, False))
 
     num_layers, latent_dim = G.components.synthesis.input_shape[1:3]
     latent_w = E.get_output_for(portraits, real_landmarks, phase=True)
@@ -57,7 +57,7 @@ def E_loss(E, G, D, perceptual_model, real_portraits, shuffled_portraits, real_l
         adv_loss = tf.reduce_mean(tf.nn.softplus(-fake_scores_out))
         adv_loss = autosummary('Loss/scores/adv_loss', adv_loss)
 
-    loss = tf.cond(tf.constant(training_flag == 'appearance', dtype=tf.bool), lambda: feedthrough(adv_loss * D_scale  + recon_loss), lambda: feedthrough(adv_loss))
+    loss = tf.cond(tf.math.equal(training_flag, 'appearance'), lambda: feedthrough(adv_loss * D_scale  + recon_loss), lambda: feedthrough(adv_loss))
 
     return loss, recon_loss, adv_loss
 
@@ -65,7 +65,7 @@ def E_loss(E, G, D, perceptual_model, real_portraits, shuffled_portraits, real_l
 # Discriminator loss function.
 def D_logistic_simplegp(E, G, D, real_portraits, shuffled_portraits, real_landmarks, training_flag, r1_gamma=10.0):
 
-    portraits = tf.cond(tf.constant(training_flag == 'appearance', dtype=tf.bool), lambda: feedthrough(real_portraits), lambda: feedthrough(shuffled_portraits))
+    portraits = tf.cond(tf.math.equal(training_flag, 'appearance'), lambda: feedthrough(real_portraits), lambda: feedthrough(shuffled_portraits))
         
     num_layers, latent_dim = G.components.synthesis.input_shape[1:3]
     latent_w = E.get_output_for(portraits, real_landmarks, phase=True)
