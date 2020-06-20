@@ -14,16 +14,15 @@ def fp32(*values):
     values = tuple(tf.cast(v, tf.float32) for v in values)
     return values if len(values) >= 2 else values[0]
 
+def feedthrough(input_value):
+    return input_value
+
 
 #----------------------------------------------------------------------------
 # Encoder loss function .
 def E_loss(E, G, D, perceptual_model, real_portraits, shuffled_portraits, real_landmarks, training_flag, feature_scale=0.00005, D_scale=0.1, perceptual_img_size=256):
-    
-    if training_flag == 'appearance':
-        portraits = real_portraits
-    else:
-        portraits = shuffled_portraits
-        
+    portraits = tf.cond(tf.strings.as_string(training_flag) == 'appearance', lambda: feedthrough(real_portraits), lambda: feedthrough(shuffled_portraits))
+
     num_layers, latent_dim = G.components.synthesis.input_shape[1:3]
     latent_w = E.get_output_for(portraits, real_landmarks, phase=True)
     latent_wp = tf.reshape(latent_w, [portraits.shape[0], num_layers, latent_dim])
@@ -50,10 +49,7 @@ def E_loss(E, G, D, perceptual_model, real_portraits, shuffled_portraits, real_l
         adv_loss = tf.reduce_mean(tf.nn.softplus(-fake_scores_out))
         adv_loss = autosummary('Loss/scores/adv_loss', adv_loss)
 
-    if training_flag == 'appearance':
-        loss = adv_loss * D_scale  + recon_loss
-    else:
-        loss = adv_loss
+    loss = tf.cond(tf.strings.as_string(training_flag) == 'appearance', lambda: feedthrough(adv_loss * D_scale  + recon_loss), lambda: feedthrough(adv_loss))
 
     return loss, recon_loss, adv_loss
 
@@ -61,10 +57,7 @@ def E_loss(E, G, D, perceptual_model, real_portraits, shuffled_portraits, real_l
 # Discriminator loss function.
 def D_logistic_simplegp(E, G, D, real_portraits, shuffled_portraits, real_landmarks, training_flag, r1_gamma=10.0):
 
-    if training_flag == 'appearance':
-        portraits = real_portraits
-    else:
-        portraits = shuffled_portraits
+    portraits = tf.cond(tf.strings.as_string(training_flag) == 'appearance', lambda: feedthrough(real_portraits), lambda: feedthrough(shuffled_portraits))
         
     num_layers, latent_dim = G.components.synthesis.input_shape[1:3]
     latent_w = E.get_output_for(portraits, real_landmarks, phase=True)
