@@ -87,11 +87,9 @@ def test(E, Gs, real_portraits_test, real_shuffled_test, real_landmarks_test, tr
                 in_shuffled_gpu = in_split_shuffled[gpu]
                 in_portraits_gpu = in_split_portraits[gpu]
 
-                assert training_mode in ["appearance", "pose"]
-                if training_mode == "appearance":
-                    portraits = in_portraits_gpu
-                else if training_mode == "pose":
-                    portraits = in_shuffled_gpu
+                with tf.device("/cpu:0"):
+                    appearance_flag = tf.math.equal(training_mode, "appearance")
+                portraits = tf.cond(appearance_flag, lambda: in_portraits_gpu, lambda: in_shuffled_gpu)
 
                 latent_w = E.get_output_for(portraits, in_landmarks_gpu, phase=False)
                 latent_wp = tf.reshape(latent_w, [portraits.shape[0], num_layers, latent_dim])
@@ -212,7 +210,7 @@ def training_loop(
     D_train_op = D_opt.apply_updates()
 
     print('building testing graph...')
-    fake_X_val = test(E, Gs, placeholder_real_portraits_test, placeholder_real_shuffled_test, placeholder_real_landmarks_test, training_mode = placeholder_training_mode, submit_config)
+    fake_X_val = test(E, Gs, placeholder_real_portraits_test, placeholder_real_shuffled_test, placeholder_real_landmarks_test, placeholder_training_mode, submit_config)
 
     sess = tf.get_default_session()
 
