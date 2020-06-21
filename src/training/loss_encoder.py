@@ -60,7 +60,7 @@ def E_loss(E, G, D, perceptual_model, real_portraits, shuffled_portraits, real_l
         adv_loss = tf.reduce_mean(tf.nn.softplus(-fake_scores_out))
         adv_loss = autosummary('Loss/scores/adv_loss', adv_loss)
 
-    loss = tf.cond(appearance_flag, lambda: feedthrough(adv_loss * D_scale  + recon_loss), lambda: feedthrough(adv_loss))
+    loss = tf.cond(appearance_flag, lambda: feedthrough(adv_loss * D_scale  + recon_loss), lambda: feedthrough(adv_loss * D_scale))
 
     return loss, recon_loss, adv_loss
 
