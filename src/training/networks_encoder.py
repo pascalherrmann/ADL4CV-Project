@@ -108,7 +108,7 @@ def Encoder(input_img, input_landmarks, size=128, filter=64, filter_max=512, num
     s0 = 4
     num_blocks = int(np.log2(size / s0))
     
-    concat_index = 3 #index of the residual block, after which the landmark and appearance information should be concatenated
+    concat_index = 5 #index of the residual block, after which the landmark and appearance information should be concatenated
 
     # define input shapes for the network
     # todo: aktuell am imput img nix verändert!!!
