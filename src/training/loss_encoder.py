@@ -48,7 +48,7 @@ def E_loss(E, G, D, perceptual_model, real_portraits, shuffled_portraits, real_l
 
     Davor haben wir immer shuffled portraits übergeben. Jetzt brauchen wir aber: Shuffled Landmarks....
     '''
-
+    reals = real_portraits
     num_layers, latent_dim = G.components.synthesis.input_shape[1:3]
 
 
