@@ -52,6 +52,11 @@ def E_loss(E, G, D, perceptual_model, real_portraits, shuffled_portraits, real_l
     num_layers, latent_dim = G.components.synthesis.input_shape[1:3]
 
 
+    # direct reconstruction
+    w_direct_rec = E.get_output_for(real_portraits, real_landmarks, phase=True)
+    w_direct_rec_tensor = tf.reshape(w_direct_rec, [reals.shape[0], num_layers, latent_dim])
+    img_direct_rec = G.components.synthesis.get_output_for(w_direct_rec_tensor, randomize_noise=False)
+
     # 1
     w_manipulated = E.get_output_for(real_portraits, shuffled_landmarks, phase=True)
     w_manipulated_tensor = tf.reshape(w_manipulated, [reals.shape[0], num_layers, latent_dim])
@@ -89,6 +94,22 @@ def E_loss(E, G, D, perceptual_model, real_portraits, shuffled_portraits, real_l
         recon_loss = recon_loss_feats + recon_loss_pixel
         recon_loss = autosummary('Loss/scores/recon_loss', recon_loss)
 
+        #
+        # Direct Rec Loss
+        #
+        vgg16_input_fake_direct = tf.transpose(img_direct_rec, perm=[0, 2, 3, 1])
+        vgg16_input_fake_direct = tf.image.resize_images(vgg16_input_fake_direct, size=[perceptual_img_size, perceptual_img_size], method=1)
+        vgg16_input_fake_direct = ((vgg16_input_fake_direct + 1) / 2) * 255
+        vgg16_feature_fake_direct = perceptual_model(vgg16_input_fake_direct)
+        recon_loss_feats_direct = feature_scale * tf.reduce_mean(tf.square(vgg16_feature_real - vgg16_feature_fake_direct))
+
+        # recon
+        recon_loss_pixel_direct = tf.reduce_mean(tf.square(img_direct_rec - real_portraits))
+        recon_loss_feats_direct = autosummary('Loss/scores/loss_feats_direct', recon_loss_feats_direct)
+        recon_loss_pixel_direct = autosummary('Loss/scores/loss_pixel_direct', recon_loss_pixel_direct)
+        recon_loss_direct = recon_loss_feats_direct + recon_loss_pixel_direct
+        recon_loss_direct = autosummary('Loss/scores/recon_loss', recon_loss_direct)
+
     with tf.variable_scope('adv_loss'):
         D_scale = autosummary('Loss/scores/d_scale', D_scale)
         adv_loss_manipulated = D_scale * tf.reduce_mean(tf.nn.softplus(-manipulated_fake_scores_out))
@@ -96,11 +117,18 @@ def E_loss(E, G, D, perceptual_model, real_portraits, shuffled_portraits, real_l
         
         adv_loss_reconstructed = D_scale * tf.reduce_mean(tf.nn.softplus(-reconstructed_fake_scores_out))
         adv_loss_reconstructed = autosummary('Loss/scores/adv_loss_reconstructed', adv_loss_reconstructed)
+
+
+
+
+
+
+
     '''
     loss = tf.cond(appearance_flag, lambda: adv_loss + recon_loss, lambda: adv_loss)
     '''
 
-    loss = adv_loss_manipulated + adv_loss_reconstructed + 2 * recon_loss
+    loss = adv_loss_manipulated + adv_loss_reconstructed + recon_loss + recon_loss_direct
 
     '''
     loss = tf.case(
@@ -109,7 +137,7 @@ def E_loss(E, G, D, perceptual_model, real_portraits, shuffled_portraits, real_l
                   default = lambda: adv_loss*0, exclusive=True)
     '''
 
-    return loss, recon_loss, adv_loss_manipulated
+    return loss, (recon_loss+recon_loss_direct), adv_loss_manipulated
 
 #----------------------------------------------------------------------------
 # Discriminator loss function.
