@@ -141,7 +141,7 @@ def Encoder(input_img, input_landmarks, size=128, filter=64, filter_max=512, num
         for i in range(concat_index, num_blocks):
             name_scope = 'encoder_res_block_%d' % (i)
             if i == concat_index:
-                nf1 = min(2*filter * 2 ** i, filter_max)
+                nf1 = min(2*filter * 2 ** i, 2*filter_max)
             else:
                 nf1 = min(filter * 2 ** i, filter_max)
             nf2 = min(filter * 2 ** (i + 1), filter_max)
