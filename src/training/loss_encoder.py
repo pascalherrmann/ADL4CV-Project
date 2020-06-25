@@ -128,7 +128,7 @@ def E_loss(E, G, D, perceptual_model, real_portraits, shuffled_portraits, real_l
     loss = tf.cond(appearance_flag, lambda: adv_loss + recon_loss, lambda: adv_loss)
     '''
 
-    loss = adv_loss_manipulated + adv_loss_reconstructed + recon_loss + recon_loss_direct
+    loss = 2*adv_loss_manipulated + 2*adv_loss_reconstructed + recon_loss + recon_loss_direct
 
     '''
     loss = tf.case(
