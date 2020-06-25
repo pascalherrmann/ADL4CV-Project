@@ -307,11 +307,15 @@ def training_loop(
             # also: show direct reconstruction
             samples_direct_rec = sess.run(fake_X_val, feed_dict={placeholder_real_portraits_test: batch_portraits_test, placeholder_real_landmarks_test: batch_landmarks_test})
 
+            # manipulate after direct rec
+            samples_manipulated_after_direct_rec = sess.run(fake_X_val, feed_dict={placeholder_real_portraits_test: samples_direct_rec, placeholder_real_landmarks_test: batch_landmarks_test_shuffled})
+
             # show: original portrait, original landmark, diret reconstruction, fake landmark, manipulated, rec.
             orin_recon = np.concatenate([
                     batch_landmarks_test_vis, # original landmarks
                     batch_portraits_test_vis, # original portraits,
                     samples_direct_rec, # direct
+                    samples_manipulated_after_direct_rec,
                     batch_landmarks_test_shuffled, # shuffled landmarks
                     samples_manipulated, # manipulated images
                     samples_reconstructed # cycle reconstructed images
