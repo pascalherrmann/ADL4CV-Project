@@ -107,7 +107,7 @@ def pose_training(E, G, D, perceptual_model, real_portraits, shuffled_portraits,
         adv_loss_reconstructed = autosummary('Loss/scores/adv_loss_pose_reconstructed', adv_loss_reconstructed)
 
 
-    loss = D_scale * adv_loss_manipulated + D_scale * adv_loss_reconstructed + recon_loss
+    loss = 2 * D_scale * adv_loss_manipulated + 2 * D_scale * adv_loss_reconstructed + recon_loss
 
     return loss, recon_loss, (adv_loss_manipulated + adv_loss_reconstructed)
 
