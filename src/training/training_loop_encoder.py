@@ -86,32 +86,29 @@ def get_train_data(sess, data_dir, submit_config, mode):
     return stack_batch
 
 
-def test(E, Gs, real_portraits_test, real_landmarks_test, real_shuffled_test, submit_config):
+def test(E, Gs, ph_portraits, ph_landmarks, training_mode, submit_config):
     with tf.name_scope("Run"), tf.control_dependencies(None):
         with tf.device("/cpu:0"):
-            in_split_landmarks = tf.split(real_landmarks_test, num_or_size_splits=submit_config.num_gpus, axis=0)
-            in_split_portraits = tf.split(real_portraits_test, num_or_size_splits=submit_config.num_gpus, axis=0)
-            in_split_shuffled = tf.split(real_shuffled_test, num_or_size_splits=submit_config.num_gpus, axis=0)
+            in_split_landmarks = tf.split(ph_landmarks, num_or_size_splits=submit_config.num_gpus, axis=0)
+            in_split_portraits = tf.split(ph_portraits, num_or_size_splits=submit_config.num_gpus, axis=0)
+
         out_split = []
         num_layers, latent_dim = Gs.components.synthesis.input_shape[1:3]
         for gpu in range(submit_config.num_gpus):
             with tf.device("/gpu:%d" % gpu):
                 in_landmarks_gpu = in_split_landmarks[gpu]
                 in_portraits_gpu = in_split_portraits[gpu]
-                in_shuffled_gpu = in_split_shuffled[gpu]
-                
-                #create images for non matching portraits and landmarks
-                latent_w = E.get_output_for(in_shuffled_gpu, in_landmarks_gpu, phase=False)
-                latent_wp = tf.reshape(latent_w, [in_shuffled_gpu.shape[0], num_layers, latent_dim])
+
+                '''
+                with tf.device("/cpu:0"):
+                    appearance_flag = tf.math.equal(training_mode, "appearance")
+                portraits = tf.cond(appearance_flag, lambda: in_portraits_gpu, lambda: in_shuffled_gpu)
+                '''
+                portraits = in_portraits_gpu
+
+                latent_w = E.get_output_for(portraits, in_landmarks_gpu, phase=False)
+                latent_wp = tf.reshape(latent_w, [portraits.shape[0], num_layers, latent_dim])
                 fake_X_val = Gs.components.synthesis.get_output_for(latent_wp, randomize_noise=False)
-                
-                out_split.append(fake_X_val)
-                
-                #create images for matching portraits and landmarks
-                latent_w = E.get_output_for(in_portraits_gpu, in_landmarks_gpu, phase=False)
-                latent_wp = tf.reshape(latent_w, [in_portraits_gpu.shape[0], num_layers, latent_dim])
-                fake_X_val = Gs.components.synthesis.get_output_for(latent_wp, randomize_noise=False)
-                
                 out_split.append(fake_X_val)
 
         with tf.device("/cpu:0"):
@@ -150,14 +147,18 @@ def training_loop(
         placeholder_real_portraits_train = tf.placeholder(tf.float32, [submit_config.batch_size, 3, submit_config.image_size, submit_config.image_size], name='placeholder_real_portraits_train')
         placeholder_real_landmarks_train = tf.placeholder(tf.float32, [submit_config.batch_size, 3, submit_config.image_size, submit_config.image_size], name='placeholder_real_landmarks_train')
         placeholder_real_shuffled_train = tf.placeholder(tf.float32, [submit_config.batch_size, 3, submit_config.image_size, submit_config.image_size], name='placeholder_real_shuffled_train')
+        placeholder_landmarks_shuffled_train = tf.placeholder(tf.float32, [submit_config.batch_size, 3, submit_config.image_size, submit_config.image_size], name='placeholder_landmarks_shuffled_train')
+
 
         placeholder_real_portraits_test = tf.placeholder(tf.float32, [submit_config.batch_size_test, 3, submit_config.image_size, submit_config.image_size], name='placeholder_real_portraits_test')
         placeholder_real_landmarks_test = tf.placeholder(tf.float32, [submit_config.batch_size_test, 3, submit_config.image_size, submit_config.image_size], name='placeholder_real_landmarks_test')
         placeholder_real_shuffled_test = tf.placeholder(tf.float32, [submit_config.batch_size_test, 3, submit_config.image_size, submit_config.image_size], name='placeholder_real_shuffled_test')
+        placeholder_real_landmarks_shuffled_test = tf.placeholder(tf.float32, [submit_config.batch_size_test, 3, submit_config.image_size, submit_config.image_size], name='placeholder_real_landmarks_shuffled_test')
 
         real_split_landmarks = tf.split(placeholder_real_landmarks_train, num_or_size_splits=submit_config.num_gpus, axis=0)
         real_split_portraits = tf.split(placeholder_real_portraits_train, num_or_size_splits=submit_config.num_gpus, axis=0)
         real_split_shuffled = tf.split(placeholder_real_shuffled_train, num_or_size_splits=submit_config.num_gpus, axis=0)
+        real_split_lm_shuffled = tf.split(placeholder_landmarks_shuffled_train, num_or_size_splits=submit_config.num_gpus, axis=0)
         
         placeholder_training_flag = tf.placeholder(tf.string, name='placeholder_training_flag')
 
@@ -270,11 +271,12 @@ def training_loop(
         
         batch_stacks_secondary = sess.run(stack_batch_train_secondary)
         batch_shuffled = batch_stacks_secondary[:,0,:,:,:]
+        batch_lm_shuffled = batch_stacks_secondary[:,1,:,:,:]
+        
         
         training_flag = "appearance" if it % 2 == 0 else "pose"
         
-        feed_dict_1 = {placeholder_real_portraits_train: batch_portraits, placeholder_real_landmarks_train: batch_landmarks, placeholder_real_shuffled_train: batch_shuffled, placeholder_training_flag: training_flag}
-
+        feed_dict_1 = {placeholder_real_portraits_train: batch_portraits, placeholder_real_landmarks_train: batch_landmarks, placeholder_real_shuffled_train:batch_shuffled, placeholder_landmarks_shuffled_train:batch_lm_shuffled, placeholder_training_flag: training_flag}
         # here we query these encoder- and discriminator losses. as input we provide: batch_stacks = batch of images + landmarks.
         _, recon_, adv_ = sess.run([E_train_op, E_loss_rec, E_loss_adv], feed_dict_1)
         _, d_r_, d_f_, d_g_= sess.run([D_train_op, D_loss_real, D_loss_fake, D_loss_grad], feed_dict_1)
@@ -297,22 +299,33 @@ def training_loop(
             
             batch_stacks_test_secondary = sess.run(stack_batch_test_secondary)
             batch_shuffled_test = batch_stacks_test_secondary[:,0,:,:,:]
+            batch_shuffled_lm_test = batch_stacks_test_secondary[:,1,:,:,:]
             
             
-            batch_shuffled_test_vis = misc.adjust_dynamic_range(batch_shuffled_test.astype(np.float32), [0, 255], [-1., 1.])
-            batch_landmarks_test_vis = misc.adjust_dynamic_range(batch_landmarks_test.astype(np.float32), [0, 255], [-1., 1.])
-            batch_portraits_test_vis = misc.adjust_dynamic_range(batch_portraits_test.astype(np.float32), [0, 255], [-1., 1.])
-
-            batch_landmarks_test = misc.adjust_dynamic_range(batch_landmarks_test.astype(np.float32), [0, 255], [-1., 1.])
             batch_portraits_test = misc.adjust_dynamic_range(batch_portraits_test.astype(np.float32), [0, 255], [-1., 1.])
+            batch_landmarks_test = misc.adjust_dynamic_range(batch_landmarks_test.astype(np.float32), [0, 255], [-1., 1.])
             batch_shuffled_test = misc.adjust_dynamic_range(batch_shuffled_test.astype(np.float32), [0, 255], [-1., 1.])
+            batch_shuffled_lm_test = misc.adjust_dynamic_range(batch_shuffled_lm_test.astype(np.float32), [0, 255], [-1., 1.])
 
+            # first: input + target landmarks = manipulated image
+            samples_manipulated = sess.run(fake_X_val, feed_dict={placeholder_real_portraits_test: batch_portraits_test, placeholder_real_landmarks_test: batch_shuffled_lm_test})
 
-            debug_samples = sess.run(fake_X_val, feed_dict={placeholder_real_portraits_test: batch_portraits_test, placeholder_real_landmarks_test: batch_landmarks_test, placeholder_real_shuffled_test:batch_shuffled_test})
+            # 2nd: manipulated + original landmarks
+            samples_reconstructed = sess.run(fake_X_val, feed_dict={placeholder_real_portraits_test: samples_manipulated, placeholder_real_landmarks_test: batch_landmarks_test})
 
-            debug_portraits = np.concatenate([batch_shuffled_test_vis, batch_portraits_test_vis], axis=0)
-            debug_landmarks = np.concatenate([batch_landmarks_test_vis, batch_landmarks_test_vis], axis=0)
-            debug_img = np.concatenate([debug_portraits, debug_landmarks, debug_samples], axis=0)
+            # also: show direct reconstruction
+            samples_direct_rec = sess.run(fake_X_val, feed_dict={placeholder_real_portraits_test: batch_portraits_test, placeholder_real_landmarks_test: batch_landmarks_test})
+
+            # show: original portrait, original landmark, diret reconstruction, fake landmark, manipulated, rec.
+            debug_img = np.concatenate([
+                    batch_landmarks_test, # original landmarks
+                    batch_portraits_test, # original portraits,
+                    samples_direct_rec, # direct
+                    batch_shuffled_lm_test, # shuffled landmarks
+                    samples_manipulated, # manipulated images
+                    samples_reconstructed # cycle reconstructed images
+                ], axis=0)
+
             debug_img = adjust_pixel_range(debug_img)
             debug_img = fuse_images(debug_img, row=3, col=submit_config.batch_size_test*2)
             # save image results during training, first row is original images and the second row is reconstructed images
