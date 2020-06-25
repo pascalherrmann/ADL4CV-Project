@@ -56,6 +56,8 @@ def E_loss(E, G, D, perceptual_model, real_portraits, shuffled_portraits, real_l
     w_direct_rec = E.get_output_for(real_portraits, real_landmarks, phase=True)
     w_direct_rec_tensor = tf.reshape(w_direct_rec, [reals.shape[0], num_layers, latent_dim])
     img_direct_rec = G.components.synthesis.get_output_for(w_direct_rec_tensor, randomize_noise=False)
+    direct_fake_scores_out = fp32(D.get_output_for(img_direct_rec, real_landmarks, None))
+
 
     # 1
     w_manipulated = E.get_output_for(real_portraits, shuffled_landmarks, phase=True)
@@ -118,6 +120,9 @@ def E_loss(E, G, D, perceptual_model, real_portraits, shuffled_portraits, real_l
         adv_loss_reconstructed = D_scale * tf.reduce_mean(tf.nn.softplus(-reconstructed_fake_scores_out))
         adv_loss_reconstructed = autosummary('Loss/scores/adv_loss_reconstructed', adv_loss_reconstructed)
 
+        adv_loss_direct = D_scale * tf.reduce_mean(tf.nn.softplus(-direct_fake_scores_out))
+        adv_loss_direct = autosummary('Loss/scores/adv_loss_direct', adv_loss_direct)
+
 
 
 
@@ -128,7 +133,7 @@ def E_loss(E, G, D, perceptual_model, real_portraits, shuffled_portraits, real_l
     loss = tf.cond(appearance_flag, lambda: adv_loss + recon_loss, lambda: adv_loss)
     '''
 
-    loss = adv_loss_manipulated + adv_loss_reconstructed + recon_loss + 0.5 * recon_loss_direct
+    loss = (adv_loss_manipulated + adv_loss_reconstructed + adv_loss_direct) + recon_loss + 0.5 * recon_loss_direct
 
     '''
     loss = tf.case(
