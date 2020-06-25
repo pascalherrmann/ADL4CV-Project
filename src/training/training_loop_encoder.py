@@ -328,7 +328,7 @@ def training_loop(
                 ], axis=0)
 
             debug_img = adjust_pixel_range(debug_img)
-            debug_img = fuse_images(debug_img, row=3, col=submit_config.batch_size_test*2)
+            debug_img = fuse_images(debug_img, row=5, col=submit_config.batch_size_test)
             # save image results during training, first row is original images and the second row is reconstructed images
             save_image('%s/iter_%08d.png' % (submit_config.run_dir, cur_nimg), debug_img)
 
