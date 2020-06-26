@@ -107,6 +107,8 @@ def Encoder(input_img, input_landmarks, size=128, filter=64, filter_max=512, num
     #print('using bn encoder phase: ', phase)
     s0 = 4
     num_blocks = int(np.log2(size / s0))
+    
+    concat_index = 1 #index of the residual block, after which the landmark and appearance information should be concatenated
 
     # define input shapes for the network
     # todo: aktuell am imput img nix verändert!!!
@@ -114,16 +116,34 @@ def Encoder(input_img, input_landmarks, size=128, filter=64, filter_max=512, num
 
     input_landmarks.set_shape([None, 3, size, size])
 
-    input_concatenated = tf.concat((input_img, input_landmarks), axis=1) # [0: batch, 1: channels, 2,3: hw]
-
     with tf.variable_scope('encoder'):
         with tf.variable_scope('input_image_stage'):
-            net = conv2d(input_concatenated, fmaps=filter, kernel=3, use_wscale=False)
-            net = leaky_relu(bn(net, phase=phase, name='bn_input_stage'))
+            net_portrait = conv2d(input_img, fmaps=filter, kernel=3, use_wscale=False)
+            net_portrait = leaky_relu(bn(net_portrait, phase=phase, name='bn_input_stage_portrait'))
+            
+            net_landmark = conv2d(input_landmarks, fmaps=filter, kernel=3, use_wscale=False)
+            net_landmark = leaky_relu(bn(net_landmark, phase=phase, name='bn_input_stage_landmark'))
 
-        for i in range(num_blocks):
+        for i in range(concat_index):
             name_scope = 'encoder_res_block_%d' % (i)
             nf1 = min(filter * 2 ** i, filter_max)
+            nf2 = min(filter * 2 ** (i + 1), filter_max)
+            
+            net_portrait = downscale2d(net_portrait, factor=2)
+            net_portrait = residual_block_bn(net_portrait, fin=nf1, fout=nf2, phase=phase, scope=name_scope)
+            
+            net_landmark = downscale2d(net_landmark, factor=2)
+            net_landmark = residual_block_bn(net_landmark, fin=nf1, fout=nf2, phase=phase, scope=name_scope)
+            
+        #concatenate both streams for portrait and landmark data
+        net = tf.concat((net_portrait, net_landmark), axis=1) # [0: batch, 1: channels, 2,3: hw]
+        
+        for i in range(concat_index, num_blocks):
+            name_scope = 'encoder_res_block_%d' % (i)
+            if i == concat_index:
+                nf1 = min(2*filter * 2 ** i, 2*filter_max)
+            else:
+                nf1 = min(filter * 2 ** i, filter_max)
             nf2 = min(filter * 2 ** (i + 1), filter_max)
             net = downscale2d(net, factor=2)
             net = residual_block_bn(net, fin=nf1, fout=nf2, phase=phase, scope=name_scope)
