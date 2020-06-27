@@ -114,7 +114,7 @@ def pose_training(E, G, D, perceptual_model, real_portraits, shuffled_portraits,
 
 #----------------------------------------------------------------------------
 # Encoder loss function .
-def E_loss(E, G, D, perceptual_model, real_portraits, shuffled_portraits, real_landmarks, shuffled_landmarks, training_flag, feature_scale=0.00005, D_scale=0.05, perceptual_img_size=256):
+def E_loss(E, G, D, perceptual_model, real_portraits, shuffled_portraits, real_landmarks, shuffled_landmarks, training_flag, feature_scale=0.00005, D_scale=0.005, perceptual_img_size=256):
 
     with tf.device("/cpu:0"):
         appearance_flag = tf.math.equal(training_flag, "appearance")
