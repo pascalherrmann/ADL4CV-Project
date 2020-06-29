@@ -106,7 +106,9 @@ def test(E, Gs, Inv, ph_portraits, ph_landmarks, training_mode, submit_config):
                 '''
                 portraits = in_portraits_gpu
                 embedded_w = Inv.get_output_for(portraits, phase=True)
-                latent_w = E.get_output_for(embedded_w, in_landmarks_gpu, phase=False)
+                embedded_w_tensor = tf.reshape(embedded_w, [portraits.shape[0], num_layers, latent_dim])
+                
+                latent_w = E.get_output_for(embedded_w_tensor, in_landmarks_gpu, phase=False)
                 latent_wp = tf.reshape(latent_w, [portraits.shape[0], num_layers, latent_dim])
                 fake_X_val = Gs.components.synthesis.get_output_for(latent_wp, randomize_noise=False)
                 out_split.append(fake_X_val)

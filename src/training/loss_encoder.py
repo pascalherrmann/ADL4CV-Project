@@ -20,7 +20,9 @@ def feedthrough(input_value):
 def appearance_training(E, G, D, Inv, perceptual_model, real_portraits, shuffled_portraits, real_landmarks, shuffled_landmarks, training_flag, feature_scale=0.00005, D_scale=0.1, perceptual_img_size=256):
     num_layers, latent_dim = G.components.synthesis.input_shape[1:3]
     embedded_w = Inv.get_output_for(real_portraits, phase=True)
-    latent_w = E.get_output_for(embedded_w, real_landmarks, phase=True)
+    embedded_w_tensor = tf.reshape(embedded_w, [real_portraits.shape[0], num_layers, latent_dim])
+    
+    latent_w = E.get_output_for(embedded_w_tensor, real_landmarks, phase=True)
     latent_wp = tf.reshape(latent_w, [real_portraits.shape[0], num_layers, latent_dim])
     fake_X = G.components.synthesis.get_output_for(latent_wp, randomize_noise=False)
     fake_scores_out = fp32(D.get_output_for(fake_X, real_landmarks, None))
@@ -63,8 +65,9 @@ def pose_training(E, G, D, Inv, perceptual_model, real_portraits, shuffled_portr
     '''
     num_layers, latent_dim = G.components.synthesis.input_shape[1:3]
     embedded_w = Inv.get_output_for(real_portraits, phase=True)
+    embedded_w_tensor = tf.reshape(embedded_w, [real_portraits.shape[0], num_layers, latent_dim])
     # 1
-    w_manipulated = E.get_output_for(embedded_w, shuffled_landmarks, phase=True)
+    w_manipulated = E.get_output_for(embedded_w_tensor, shuffled_landmarks, phase=True)
     w_manipulated_tensor = tf.reshape(w_manipulated, [real_portraits.shape[0], num_layers, latent_dim])
     img_manipulated = G.components.synthesis.get_output_for(w_manipulated_tensor, randomize_noise=False)
 
@@ -135,7 +138,9 @@ def D_logistic_simplegp(E, G, D, Inv, real_portraits, shuffled_portraits, real_l
         
     num_layers, latent_dim = G.components.synthesis.input_shape[1:3]
     embedded_w = Inv.get_output_for(portraits, phase=True)
-    latent_w = E.get_output_for(embedded_w, real_landmarks, phase=True)
+    embedded_w_tensor = tf.reshape(embedded_w, [portraits.shape[0], num_layers, latent_dim])
+    
+    latent_w = E.get_output_for(embedded_w_tensor, real_landmarks, phase=True)
     latent_wp = tf.reshape(latent_w, [portraits.shape[0], num_layers, latent_dim]) # make synthetic from shuffled ones!
     fake_X = G.components.synthesis.get_output_for(latent_wp, randomize_noise=False)
     real_scores_out = fp32(D.get_output_for(real_portraits, real_landmarks, None)) # real portraits, real landmarks
