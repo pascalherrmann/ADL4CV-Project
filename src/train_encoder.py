@@ -15,6 +15,7 @@ D_loss          = EasyDict(func_name='training.loss_encoder.D_logistic_simplegp'
 lr              = EasyDict(learning_rate=0.0001, decay_step=30000, decay_rate=0.8, stair=False)
 Data_dir        = EasyDict(data_train=config.DATA_DIR, data_test=config.TEST_DATA_DIR)
 Decoder_pkl     = EasyDict(decoder_pkl=config.PICKLE_DIR)
+Inversion_pkl   = EasyDict(inversion_pkl=config.INVERSION_PICKLE_DIR)
 tf_config       = {'rnd.np_random_seed': 1000}
 submit_config   = dnnlib.SubmitConfig()
 
@@ -52,7 +53,7 @@ def main():
     
     kwargs = EasyDict(train)
     kwargs.update(Encoder_args=Encoder, E_opt_args=E_opt, D_opt_args=D_opt, E_loss_args=E_loss, D_loss_args=D_loss, lr_args=lr)
-    kwargs.update(dataset_args=Data_dir, decoder_pkl=Decoder_pkl, tf_config=tf_config)
+    kwargs.update(dataset_args=Data_dir, decoder_pkl=Decoder_pkl, inversion_pkl=Inversion_pkl, tf_config=tf_config)
     kwargs.lr_args.decay_step = train.max_iters // 4
     kwargs.submit_config = copy.deepcopy(submit_config)
     kwargs.submit_config.num_gpus = num_gpus

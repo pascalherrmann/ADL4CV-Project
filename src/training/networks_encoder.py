@@ -103,53 +103,48 @@ def residual_block_bn(inputs, fin, fout, phase, scope): #resnet v1
     return net
 
 
-def Encoder(input_img, input_landmarks, size=128, filter=64, filter_max=512, num_layers=12, phase=True, **kwargs):
+def Encoder(embedded_w, input_landmarks, size=128, filter=64, filter_max=512, num_layers=12, phase=True, **kwargs):
     #print('using bn encoder phase: ', phase)
     s0 = 4
     num_blocks = int(np.log2(size / s0))
-    
-    concat_index = 3 #index of the residual block, after which the landmark and appearance information should be concatenated
 
     # define input shapes for the network
     # todo: aktuell am imput img nix verändert!!!
-    input_img.set_shape([None, 3, size, size])
+    embedded_w.set_shape([None, 512, 18])
+    
+    embedded_w = tf.expand_dims(embedded_w, 3)
 
     input_landmarks.set_shape([None, 3, size, size])
 
-    with tf.variable_scope('encoder'):
-        with tf.variable_scope('input_image_stage'):
-            net_portrait = conv2d(input_img, fmaps=filter, kernel=3, use_wscale=False)
-            net_portrait = leaky_relu(bn(net_portrait, phase=phase, name='bn_input_stage_portrait'))
-            
-            net_landmark = conv2d(input_landmarks, fmaps=filter, kernel=3, use_wscale=False)
-            net_landmark = leaky_relu(bn(net_landmark, phase=phase, name='bn_input_stage_landmark'))
+    #input_concatenated = tf.concat((input_img, input_landmarks), axis=1) # [0: batch, 1: channels, 2,3: hw]
 
-        for i in range(concat_index):
-            name_scope = 'encoder_res_block_%d' % (i)
+    with tf.variable_scope('encoder'):
+        with tf.variable_scope('landmark_image_stage'):
+            net = conv2d(input_landmarks, fmaps=filter, kernel=3, use_wscale=False)
+            net = leaky_relu(bn(net, phase=phase, name='bn_input_stage'))
+
+        for i in range(num_blocks):
+            name_scope = 'landmark_encoder_res_block_%d' % (i)
             nf1 = min(filter * 2 ** i, filter_max)
-            nf2 = min(filter * 2 ** (i + 1), filter_max)
-            
-            net_portrait = downscale2d(net_portrait, factor=2)
-            net_portrait = residual_block_bn(net_portrait, fin=nf1, fout=nf2, phase=phase, scope=name_scope)
-            
-            net_landmark = downscale2d(net_landmark, factor=2)
-            net_landmark = residual_block_bn(net_landmark, fin=nf1, fout=nf2, phase=phase, scope=name_scope)
-            
-        #concatenate both streams for portrait and landmark data
-        net = tf.concat((net_portrait, net_landmark), axis=1) # [0: batch, 1: channels, 2,3: hw]
-        
-        for i in range(concat_index, num_blocks):
-            name_scope = 'encoder_res_block_%d' % (i)
-            if i == concat_index:
-                nf1 = min(2*filter * 2 ** i, 2*filter_max)
-            else:
-                nf1 = min(filter * 2 ** i, filter_max)
             nf2 = min(filter * 2 ** (i + 1), filter_max)
             net = downscale2d(net, factor=2)
             net = residual_block_bn(net, fin=nf1, fout=nf2, phase=phase, scope=name_scope)
 
-        with tf.variable_scope('encoder_fc'):
-            latent_w = dense(net, fmaps=512*num_layers, gain=1, use_wscale=False)
-            latent_w = bn(latent_w, phase=phase, name='fc_1')
-
+        with tf.variable_scope('landmark_encoder_fc'):
+            lm_context = dense(net, fmaps=32*num_layers*1, gain=1, use_wscale=False)
+            lm_context = leaky_relu(bn(lm_context, phase=phase, name='fc_1'))
+        
+        with tf.variable_scope('latent_code_encoder'):
+            w_context = conv2d(embedded_w, fmaps=32, kernel=1, use_wscale=False)
+            w_context = leaky_relu(bn(w_context, phase=phase, name='bn_input_stage'))
+            
+        concatenated_context = tf.concat((w_context, lm_context), axis=1)
+        
+        with tf.variable_scope('decoder'):
+            latent_modifier = conv2d(concatenated_context, fmaps=512, kernel=1, use_wscale=False)
+            latent_modifier = bn(latent_modifier, phase=phase, name='bn_input_stage')
+        
+        latent_w = tf.math.add(embedded_w, latent_modifier)
+        latent_w = tf.squeeze(latent_w, 3)
+        
         return latent_w

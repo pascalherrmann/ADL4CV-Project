@@ -17,9 +17,10 @@ def fp32(*values):
 def feedthrough(input_value):
     return input_value
 
-def appearance_training(E, G, D, perceptual_model, real_portraits, shuffled_portraits, real_landmarks, shuffled_landmarks, training_flag, feature_scale=0.00005, D_scale=0.1, perceptual_img_size=256):
+def appearance_training(E, G, D, Inv, perceptual_model, real_portraits, shuffled_portraits, real_landmarks, shuffled_landmarks, training_flag, feature_scale=0.00005, D_scale=0.1, perceptual_img_size=256):
     num_layers, latent_dim = G.components.synthesis.input_shape[1:3]
-    latent_w = E.get_output_for(real_portraits, real_landmarks, phase=True)
+    embedded_w = Inv.get_output_for(real_portraits, phase=True)
+    latent_w = E.get_output_for(embedded_w, real_landmarks, phase=True)
     latent_wp = tf.reshape(latent_w, [real_portraits.shape[0], num_layers, latent_dim])
     fake_X = G.components.synthesis.get_output_for(latent_wp, randomize_noise=False)
     fake_scores_out = fp32(D.get_output_for(fake_X, real_landmarks, None))
@@ -48,7 +49,7 @@ def appearance_training(E, G, D, perceptual_model, real_portraits, shuffled_port
 
     return loss, recon_loss, adv_loss
 
-def pose_training(E, G, D, perceptual_model, real_portraits, shuffled_portraits, real_landmarks, shuffled_landmarks, training_flag, feature_scale=0.00005, D_scale=0.1, perceptual_img_size=256):
+def pose_training(E, G, D, Inv, perceptual_model, real_portraits, shuffled_portraits, real_landmarks, shuffled_landmarks, training_flag, feature_scale=0.00005, D_scale=0.1, perceptual_img_size=256):
     '''
     # CYCLE CONSISTENCY
     * 1: Feed Original Portrait + SHUFFLED Landmark into Encoder -> Get W for "Manipulated Image"
@@ -61,9 +62,9 @@ def pose_training(E, G, D, perceptual_model, real_portraits, shuffled_portraits,
     Davor haben wir immer shuffled portraits übergeben. Jetzt brauchen wir aber: Shuffled Landmarks....
     '''
     num_layers, latent_dim = G.components.synthesis.input_shape[1:3]
-
+    embedded_w = Inv.get_output_for(real_portraits, phase=True)
     # 1
-    w_manipulated = E.get_output_for(real_portraits, shuffled_landmarks, phase=True)
+    w_manipulated = E.get_output_for(embedded_w, shuffled_landmarks, phase=True)
     w_manipulated_tensor = tf.reshape(w_manipulated, [real_portraits.shape[0], num_layers, latent_dim])
     img_manipulated = G.components.synthesis.get_output_for(w_manipulated_tensor, randomize_noise=False)
 
@@ -71,7 +72,7 @@ def pose_training(E, G, D, perceptual_model, real_portraits, shuffled_portraits,
     manipulated_fake_scores_out = fp32(D.get_output_for(img_manipulated, shuffled_landmarks, None))
 
     # 3
-    w_reconstructed = E.get_output_for(img_manipulated, real_landmarks, phase=True)
+    w_reconstructed = E.get_output_for(w_manipulated_tensor, real_landmarks, phase=True)
     w_reconstructed_tensor = tf.reshape(w_reconstructed, [real_portraits.shape[0], num_layers, latent_dim])
     img_reconstructed = G.components.synthesis.get_output_for(w_reconstructed_tensor, randomize_noise=False)
 
@@ -114,18 +115,18 @@ def pose_training(E, G, D, perceptual_model, real_portraits, shuffled_portraits,
 
 #----------------------------------------------------------------------------
 # Encoder loss function .
-def E_loss(E, G, D, perceptual_model, real_portraits, shuffled_portraits, real_landmarks, shuffled_landmarks, training_flag, feature_scale=0.00005, D_scale=0.1, perceptual_img_size=256):
+def E_loss(E, G, D, Inv, perceptual_model, real_portraits, shuffled_portraits, real_landmarks, shuffled_landmarks, training_flag, feature_scale=0.00005, D_scale=0.1, perceptual_img_size=256):
 
     with tf.device("/cpu:0"):
         appearance_flag = tf.math.equal(training_flag, "appearance")
 
-    loss, recon_loss, adv_loss = tf.cond(appearance_flag, lambda: appearance_training(E, G, D, perceptual_model, real_portraits, shuffled_portraits, real_landmarks, shuffled_landmarks, training_flag, feature_scale, D_scale, perceptual_img_size), lambda: pose_training(E, G, D, perceptual_model, real_portraits, shuffled_portraits, real_landmarks, shuffled_landmarks, training_flag, feature_scale, D_scale, perceptual_img_size))
+    loss, recon_loss, adv_loss = tf.cond(appearance_flag, lambda: appearance_training(E, G, D, Inv, perceptual_model, real_portraits, shuffled_portraits, real_landmarks, shuffled_landmarks, training_flag, feature_scale, D_scale, perceptual_img_size), lambda: pose_training(E, G, D, Inv, perceptual_model, real_portraits, shuffled_portraits, real_landmarks, shuffled_landmarks, training_flag, feature_scale, D_scale, perceptual_img_size))
 
     return loss, recon_loss, adv_loss
 
 #----------------------------------------------------------------------------
 # Discriminator loss function.
-def D_logistic_simplegp(E, G, D, real_portraits, shuffled_portraits, real_landmarks, training_flag, r1_gamma=10.0):
+def D_logistic_simplegp(E, G, D, Inv, real_portraits, shuffled_portraits, real_landmarks, training_flag, r1_gamma=10.0):
 
     with tf.device("/cpu:0"):
         appearance_flag = tf.math.equal(training_flag, "appearance")
@@ -133,7 +134,8 @@ def D_logistic_simplegp(E, G, D, real_portraits, shuffled_portraits, real_landma
     portraits = tf.cond(appearance_flag, lambda: feedthrough(real_portraits), lambda: feedthrough(shuffled_portraits))
         
     num_layers, latent_dim = G.components.synthesis.input_shape[1:3]
-    latent_w = E.get_output_for(portraits, real_landmarks, phase=True)
+    embedded_w = Inv.get_output_for(portraits, phase=True)
+    latent_w = E.get_output_for(embedded_w, real_landmarks, phase=True)
     latent_wp = tf.reshape(latent_w, [portraits.shape[0], num_layers, latent_dim]) # make synthetic from shuffled ones!
     fake_X = G.components.synthesis.get_output_for(latent_wp, randomize_noise=False)
     real_scores_out = fp32(D.get_output_for(real_portraits, real_landmarks, None)) # real portraits, real landmarks

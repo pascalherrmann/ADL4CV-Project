@@ -86,7 +86,7 @@ def get_train_data(sess, data_dir, submit_config, mode):
     return stack_batch
 
 
-def test(E, Gs, ph_portraits, ph_landmarks, training_mode, submit_config):
+def test(E, Gs, Inv, ph_portraits, ph_landmarks, training_mode, submit_config):
     with tf.name_scope("Run"), tf.control_dependencies(None):
         with tf.device("/cpu:0"):
             in_split_landmarks = tf.split(ph_landmarks, num_or_size_splits=submit_config.num_gpus, axis=0)
@@ -105,8 +105,8 @@ def test(E, Gs, ph_portraits, ph_landmarks, training_mode, submit_config):
                 portraits = tf.cond(appearance_flag, lambda: in_portraits_gpu, lambda: in_shuffled_gpu)
                 '''
                 portraits = in_portraits_gpu
-
-                latent_w = E.get_output_for(portraits, in_landmarks_gpu, phase=False)
+                embedded_w = Inv.get_output_for(portraits, phase=True)
+                latent_w = E.get_output_for(embedded_w, in_landmarks_gpu, phase=False)
                 latent_wp = tf.reshape(latent_w, [portraits.shape[0], num_layers, latent_dim])
                 fake_X_val = Gs.components.synthesis.get_output_for(latent_wp, randomize_noise=False)
                 out_split.append(fake_X_val)
@@ -132,6 +132,7 @@ def training_loop(
                   tf_config               = {},
                   dataset_args            = EasyDict(),
                   decoder_pkl             = EasyDict(),
+                  inversion_pkl           = EasyDict(),
                   drange_data             = [0, 255],
                   drange_net              = [-1,1],   # Dynamic range used when feeding image data to the networks.
                   mirror_augment          = False,
@@ -183,6 +184,7 @@ def training_loop(
 
             E = tflib.Network('E', size=submit_config.image_size, filter=64, filter_max=1024, num_layers=num_layers, phase=True, **Encoder_args)
             start = 0
+        Inv, _, _, _ = misc.load_pkl(inversion_pkl.inversion_pkl)
 
     E.print_layers(); Gs.print_layers(); D.print_layers()
 
@@ -205,17 +207,18 @@ def training_loop(
             E_gpu = E if gpu == 0 else E.clone(E.name + '_shadow')
             D_gpu = D if gpu == 0 else D.clone(D.name + '_shadow')
             G_gpu = Gs if gpu == 0 else Gs.clone(Gs.name + '_shadow')
+            Inv_gpu = Inv if gpu == 0 else Inv.clone(Inv.name + '_shadow')
             perceptual_model = PerceptualModel(img_size=[E_loss_args.perceptual_img_size, E_loss_args.perceptual_img_size], multi_layers=False)
             real_portraits_gpu = process_reals(real_split_portraits[gpu], mirror_augment, drange_data, drange_net)
             shuffled_portraits_gpu = process_reals(real_split_shuffled[gpu], mirror_augment, drange_data, drange_net)
             real_landmarks_gpu = process_reals(real_split_landmarks[gpu], mirror_augment, drange_data, drange_net)
             shuffled_landmarks_gpu = process_reals(real_split_lm_shuffled[gpu], mirror_augment, drange_data, drange_net)
             with tf.name_scope('E_loss'), tf.control_dependencies(None):
-                E_loss, recon_loss, adv_loss = dnnlib.util.call_func_by_name(E=E_gpu, G=G_gpu, D=D_gpu, perceptual_model=perceptual_model, real_portraits=real_portraits_gpu, shuffled_portraits=shuffled_portraits_gpu, real_landmarks=real_landmarks_gpu, shuffled_landmarks=shuffled_landmarks_gpu, training_flag=placeholder_training_flag, **E_loss_args)
+                E_loss, recon_loss, adv_loss = dnnlib.util.call_func_by_name(E=E_gpu, G=G_gpu, D=D_gpu, Inv=Inv_gpu, perceptual_model=perceptual_model, real_portraits=real_portraits_gpu, shuffled_portraits=shuffled_portraits_gpu, real_landmarks=real_landmarks_gpu, shuffled_landmarks=shuffled_landmarks_gpu, training_flag=placeholder_training_flag, **E_loss_args)
                 E_loss_rec += recon_loss
                 E_loss_adv += adv_loss
             with tf.name_scope('D_loss'), tf.control_dependencies(None):
-                D_loss, loss_fake, loss_real, loss_gp = dnnlib.util.call_func_by_name(E=E_gpu, G=G_gpu, D=D_gpu, real_portraits=real_portraits_gpu, shuffled_portraits=shuffled_portraits_gpu, real_landmarks=real_landmarks_gpu, training_flag=placeholder_training_flag, **D_loss_args) # change signature in ...
+                D_loss, loss_fake, loss_real, loss_gp = dnnlib.util.call_func_by_name(E=E_gpu, G=G_gpu, D=D_gpu, Inv=Inv_gpu, real_portraits=real_portraits_gpu, shuffled_portraits=shuffled_portraits_gpu, real_landmarks=real_landmarks_gpu, training_flag=placeholder_training_flag, **D_loss_args) # change signature in ...
                 D_loss_real += loss_real
                 D_loss_fake += loss_fake
                 D_loss_grad += loss_gp
@@ -233,7 +236,7 @@ def training_loop(
     D_train_op = D_opt.apply_updates()
 
     print('building testing graph...')
-    fake_X_val = test(E, Gs, placeholder_real_portraits_test, placeholder_real_landmarks_test, placeholder_real_shuffled_test, submit_config)
+    fake_X_val = test(E, Gs, Inv, placeholder_real_portraits_test, placeholder_real_landmarks_test, placeholder_real_shuffled_test, submit_config)
     
     #sampled_portraits_val = sample_random_portraits(Gs, submit_config.batch_size)
     #sampled_portraits_val_test = sample_random_portraits(Gs, submit_config.batch_size_test)
@@ -275,7 +278,7 @@ def training_loop(
         batch_lm_shuffled = batch_stacks_secondary[:,1,:,:,:]
         
         
-        training_flag = "pose" if it % 5 == 0 else "appearance"
+        training_flag = "pose" if it % 2 == 0 else "appearance"
         
         feed_dict_1 = {placeholder_real_portraits_train: batch_portraits, placeholder_real_landmarks_train: batch_landmarks, placeholder_real_shuffled_train:batch_shuffled, placeholder_landmarks_shuffled_train:batch_lm_shuffled, placeholder_training_flag: training_flag}
         # here we query these encoder- and discriminator losses. as input we provide: batch_stacks = batch of images + landmarks.
