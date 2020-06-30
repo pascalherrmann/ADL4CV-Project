@@ -63,12 +63,13 @@ def pose_training(E, G, D, Inv, perceptual_model, real_portraits, shuffled_portr
     manipulated_fake_scores_out = fp32(D.get_output_for(img_manipulated, shuffled_landmarks, None))
 
     # 3
+
     w_reconstructed = E.get_output_for(w_manipulated_tensor, real_landmarks, phase=True)
     w_reconstructed_tensor = tf.reshape(w_reconstructed, [real_portraits.shape[0], num_layers, latent_dim])
-    img_reconstructed = G.components.synthesis.get_output_for(w_reconstructed_tensor, randomize_noise=False)
-
+    #img_reconstructed = G.components.synthesis.get_output_for(w_reconstructed_tensor, randomize_noise=False)
+    
     # 4
-    reconstructed_fake_scores_out = fp32(D.get_output_for(img_reconstructed, real_landmarks, None))
+    #reconstructed_fake_scores_out = fp32(D.get_output_for(img_reconstructed, real_landmarks, None))
 
     # 5
     with tf.variable_scope('recon_loss_pose'):
@@ -79,13 +80,14 @@ def pose_training(E, G, D, Inv, perceptual_model, real_portraits, shuffled_portr
         adv_loss_manipulated = tf.reduce_mean(tf.nn.softplus(-manipulated_fake_scores_out))
         adv_loss_manipulated = autosummary('Loss/scores/adv_loss_pose_manipulated', adv_loss_manipulated)
         
+        '''
         adv_loss_reconstructed = tf.reduce_mean(tf.nn.softplus(-reconstructed_fake_scores_out))
         adv_loss_reconstructed = autosummary('Loss/scores/adv_loss_pose_reconstructed', adv_loss_reconstructed)
+        '''
 
+    loss = D_scale * adv_loss_manipulated# + D_scale * adv_loss_reconstructed + recon_loss
 
-    loss = D_scale * adv_loss_manipulated + D_scale * adv_loss_reconstructed + recon_loss
-
-    return loss, recon_loss, (adv_loss_manipulated + adv_loss_reconstructed)
+    return loss, recon_loss, (adv_loss_manipulated)# + adv_loss_reconstructed)
 
 
 #----------------------------------------------------------------------------
