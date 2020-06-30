@@ -10,7 +10,7 @@ train           = EasyDict(run_func_name='training.training_loop_encoder.trainin
 Encoder         = EasyDict(func_name='training.networks_encoder.Encoder')
 E_opt           = EasyDict(beta1=0.9, beta2=0.99, epsilon=1e-8)
 D_opt           = EasyDict(beta1=0.9, beta2=0.99, epsilon=1e-8)
-E_loss          = EasyDict(func_name='training.loss_encoder.E_loss', feature_scale=0.00005, D_scale=0.05, perceptual_img_size=256)
+E_loss          = EasyDict(func_name='training.loss_encoder.E_loss', feature_scale=0.00005, D_scale=0.3, perceptual_img_size=256)
 D_loss          = EasyDict(func_name='training.loss_encoder.D_logistic_simplegp', r1_gamma=10.0)
 lr              = EasyDict(learning_rate=0.0001, decay_step=30000, decay_rate=0.8, stair=False)
 Data_dir        = EasyDict(data_train=config.DATA_DIR, data_test=config.TEST_DATA_DIR)
