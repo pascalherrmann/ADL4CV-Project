@@ -13,7 +13,7 @@ D_opt           = EasyDict(beta1=0.9, beta2=0.99, epsilon=1e-8)
 E_loss          = EasyDict(func_name='training.loss_encoder.E_loss', feature_scale=0.00005, D_scale=0.05, perceptual_img_size=256)
 D_loss          = EasyDict(func_name='training.loss_encoder.D_logistic_simplegp', r1_gamma=10.0)
 lr              = EasyDict(learning_rate=0.0001, decay_step=30000, decay_rate=0.8, stair=False)
-Data_dir        = EasyDict(data_train=config.DATA_DIR, data_test=config.DATA_DIR)
+Data_dir        = EasyDict(data_train=config.DATA_DIR, data_test=config.TEST_DATA_DIR)
 Decoder_pkl     = EasyDict(decoder_pkl=config.PICKLE_DIR)
 tf_config       = {'rnd.np_random_seed': 1000}
 submit_config   = dnnlib.SubmitConfig()
@@ -63,6 +63,7 @@ def main():
     kwargs.submit_config.run_dir_root = dnnlib.submission.submit.get_template_from_path(config.result_dir)
     kwargs.submit_config.run_dir_ignore += config.run_dir_ignore
     kwargs.submit_config.run_desc = desc
+    kwargs.submit_config.LOG_DIR = config.getGdrivePath()
 
     dnnlib.submit_run(**kwargs)
 

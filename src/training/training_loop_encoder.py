@@ -52,13 +52,22 @@ def parse_tfrecord_tf(record):
 # -> batch of stacks
 def get_train_data(sess, data_dir, submit_config, mode):
     if mode == 'train':
-        shuffle = False; repeat = True; batch_size = submit_config.batch_size #? set shuffle to false for now
+        shuffle = False; repeat = True; batch_size = submit_config.batch_size
     elif mode == 'test':
         shuffle = False; repeat = True; batch_size = submit_config.batch_size_test
     else:
         raise Exception("mode must in ['train', 'test'], but got {}" % mode)
 
-    dset = tf.data.TFRecordDataset(data_dir)
+    if (mode == 'train') | (mode == 'train_secondary'):
+        #get list of all tfrecord files in the dataset folder
+        records_path_list = os.listdir(path=data_dir)
+        for i in range(len(records_path_list)):
+            records_path_list[i] = os.path.join(data_dir, records_path_list[i])
+    
+        dset = tf.data.TFRecordDataset(records_path_list)
+    else:
+        dset = tf.data.TFRecordDataset(data_dir)
+        
     dset = dset.map(parse_tfrecord_tf, num_parallel_calls=16) # we can still take the whole [2, ..., ..., ...] sample here
     if False: #shuffle:
         bytes_per_item = np.prod([2, 3, submit_config.image_size, submit_config.image_size]) * np.dtype('uint8').itemsize # 2x byte size!!!
@@ -279,6 +288,7 @@ def training_loop(
             batch_portraits_test = batch_stacks_test[:,0,:,:,:]
             batch_landmarks_test = batch_stacks_test[:,1,:,:,:]
 
+            batch_shuffled_test_vis = misc.adjust_dynamic_range(batch_shuffled_test.astype(np.float32), [0, 255], [-1., 1.])
             batch_landmarks_test_vis = misc.adjust_dynamic_range(batch_landmarks_test.astype(np.float32), [0, 255], [-1., 1.])
             batch_portraits_test_vis = misc.adjust_dynamic_range(batch_portraits_test.astype(np.float32), [0, 255], [-1., 1.])
 
