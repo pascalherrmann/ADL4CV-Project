@@ -35,7 +35,7 @@ def appearance_training(E, G, D, Inv, perceptual_model, real_portraits, shuffled
         adv_loss = tf.reduce_mean(tf.nn.softplus(-fake_scores_out))
         adv_loss = autosummary('Loss/scores/adv_loss_appearance', adv_loss)
 
-    loss = adv_loss * D_scale  + recon_loss
+    loss = adv_loss  + recon_loss
 
     return loss, recon_loss, adv_loss
 
@@ -83,7 +83,7 @@ def pose_training(E, G, D, Inv, perceptual_model, real_portraits, shuffled_portr
         adv_loss_reconstructed = autosummary('Loss/scores/adv_loss_pose_reconstructed', adv_loss_reconstructed)
 
 
-    loss = D_scale * adv_loss_manipulated + D_scale * adv_loss_reconstructed + recon_loss
+    loss = adv_loss_manipulated + adv_loss_reconstructed + recon_loss
 
     return loss, recon_loss, (adv_loss_manipulated + adv_loss_reconstructed)
 
