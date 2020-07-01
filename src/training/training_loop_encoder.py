@@ -309,7 +309,7 @@ def training_loop(
         batch_lm_shuffled = batch_stacks_secondary[:,1,:,:,:]
         
         
-        training_flag = "appearance" if it % 5 == 0 else "pose"
+        training_flag = "pose"
         
         feed_dict_1 = {placeholder_real_portraits_train: batch_portraits, placeholder_real_landmarks_train: batch_landmarks, placeholder_real_shuffled_train:batch_shuffled, placeholder_landmarks_shuffled_train:batch_lm_shuffled, placeholder_training_flag: training_flag}
         # here we query these encoder- and discriminator losses. as input we provide: batch_stacks = batch of images + landmarks.
