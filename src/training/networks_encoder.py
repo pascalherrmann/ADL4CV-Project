@@ -23,10 +23,14 @@ def dense(x, fmaps, gain=np.sqrt(2), use_wscale=False):
 # input: w of shape [batch, num_channels, input_filters]
 # output of shape [batch, num_channels, output_filters]
 def channel_independent_dense(x, output_filters, num_channels):
+    batch_size =  tf.shape(x)[0];
+    
     output_list = []
     for i in range(num_channels):
         x_i = x[:,i, :]
-        output_list.append(dense(x_i, fmaps=output_filters, gain=1, use_wscale=False))
+        x_i = dense(x_i, fmaps=output_filters, gain=1, use_wscale=False)
+        x_i = tf.reshape(x_i, [batch_size, 1, output_filters])
+        output_list.append(x_i)
     return tf.concat(output_list, axis=1)
 
 
