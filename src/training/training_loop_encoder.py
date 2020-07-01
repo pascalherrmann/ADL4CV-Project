@@ -82,7 +82,7 @@ def get_train_data(sess, data_dir, submit_config, mode):
     return stack_batch
 
 
-def test(E, Gs, ph_portraits, ph_landmarks, training_mode, submit_config):
+def test(E, Gs, E_rig, E_lm, Dec_rig, ph_portraits, ph_landmarks, training_mode, submit_config):
     with tf.name_scope("Run"), tf.control_dependencies(None):
         with tf.device("/cpu:0"):
             in_split_landmarks = tf.split(ph_landmarks, num_or_size_splits=submit_config.num_gpus, axis=0)
@@ -110,17 +110,21 @@ def test(E, Gs, ph_portraits, ph_landmarks, training_mode, submit_config):
                 # generate fakes
                 # 1
                 w = E.get_output_for(portraits, phase=True)
+                w = tf.reshape(w, [portraits.shape[0], 12, 512])
+
                 # 2
                 l = E_rig.get_output_for(w)
                 # 3
                 p = E_lm.get_output_for(in_landmarks_gpu)
                 # 4
                 diff = Dec_rig.get_output_for(l, p)
+                diff = tf.reshape(diff, [portraits.shape[0], 12, 512])
+
                 # 5
                 w_manipulated = w + diff
                 #
-                w_manipulated_tensor = tf.reshape(w_manipulated, [reals.shape[0], num_layers, latent_dim])
-                fake_X_val = G.components.synthesis.get_output_for(w_manipulated_tensor, randomize_noise=False)
+                w_manipulated_tensor = tf.reshape(w_manipulated, [portraits.shape[0], num_layers, latent_dim])
+                fake_X_val = Gs.components.synthesis.get_output_for(w_manipulated_tensor, randomize_noise=False)
 
 
 
@@ -210,14 +214,14 @@ def training_loop(
                               # input is not passed here (just construction - note that we do not call the actual function!). Instead, network will inspect build function and require it for the get_output_for function.
 
             # create: riggan encoder + decoder
-            E_rig = tflib.Network('E_rig', func_name="training.networks_stylegan.StyleRig_Encoder")
-            Dec_rig = tflib.Network('D_rig', func_name="training.networks_stylegan.StyleRig_Decoder")
+            E_rig = tflib.Network('E_rig', func_name="training.networks_encoder.StyleRig_Encoder")
+            Dec_rig = tflib.Network('D_rig', func_name="training.networks_encoder.StyleRig_Decoder")
 
             print("Created new Discriminator!")
 
             start = 0
 
-    E_lm.print_layers(); Gs.print_layers(); D.print_layers(); E_rig.print_layers(); D_rig.print_layers()
+    E_lm.print_layers(); Gs.print_layers(); D.print_layers(); E_rig.print_layers(); Dec_rig.print_layers()
 
     global_step0 = tf.Variable(start, trainable=False, name='learning_rate_step')
     learning_rate = tf.train.exponential_decay(lr_args.learning_rate, global_step0, lr_args.decay_step,
@@ -252,11 +256,11 @@ def training_loop(
             shuffled_landmarks_gpu = process_reals(real_split_lm_shuffled[gpu], mirror_augment, drange_data, drange_net)
 
             with tf.name_scope('E_loss'), tf.control_dependencies(None):
-                E_loss, recon_loss, adv_loss = dnnlib.util.call_func_by_name(E=E_gpu, G=G_gpu, D=D_gpue, E_lm=E_lm_gpu, E_rig=E_rig_gpu, Dec_rig=Dec_rig_gpu, perceptual_model=perceptual_model, real_portraits=real_portraits_gpu, shuffled_portraits=shuffled_portraits_gpu, real_landmarks=real_landmarks_gpu, shuffled_landmarks=shuffled_landmarks_gpu, training_mode=placeholder_training_mode, **E_loss_args) # change signature in loss
+                E_loss, recon_loss, adv_loss = dnnlib.util.call_func_by_name(E=E_gpu, G=G_gpu, D=D_gpu, E_lm=E_lm_gpu, E_rig=E_rig_gpu, Dec_rig=Dec_rig_gpu, perceptual_model=perceptual_model, real_portraits=real_portraits_gpu, shuffled_portraits=shuffled_portraits_gpu, real_landmarks=real_landmarks_gpu, shuffled_landmarks=shuffled_landmarks_gpu, training_mode=placeholder_training_mode, **E_loss_args) # change signature in loss
                 E_loss_rec += recon_loss
                 E_loss_adv += adv_loss
             with tf.name_scope('D_loss'), tf.control_dependencies(None):
-                D_loss, loss_fake, loss_real, loss_gp = dnnlib.util.call_func_by_name(E=E_gpu, G=G_gpu, D=D_gpue, E_lm=E_lm_gpu, E_rig=E_rig_gpu, Dec_rig=Dec_rig_gpu, real_portraits=real_portraits_gpu, shuffled_portraits=shuffled_portraits_gpu, real_landmarks=real_landmarks_gpu, training_mode=placeholder_training_mode, **D_loss_args) # change signature in ...
+                D_loss, loss_fake, loss_real, loss_gp = dnnlib.util.call_func_by_name(E=E_gpu, G=G_gpu, D=D_gpu, E_lm=E_lm_gpu, E_rig=E_rig_gpu, Dec_rig=Dec_rig_gpu, real_portraits=real_portraits_gpu, shuffled_portraits=shuffled_portraits_gpu, real_landmarks=real_landmarks_gpu, training_mode=placeholder_training_mode, **D_loss_args) # change signature in ...
                 D_loss_real += loss_real
                 D_loss_fake += loss_fake
                 D_loss_grad += loss_gp
@@ -278,7 +282,7 @@ def training_loop(
     D_train_op = D_opt.apply_updates()
 
     print('building testing graph...')
-    fake_X_val = test(E, Gs, placeholder_real_portraits_test, placeholder_real_landmarks_test, placeholder_training_mode, submit_config)
+    fake_X_val = test(E, Gs, E_rig, E_lm, Dec_rig,  placeholder_real_portraits_test, placeholder_real_landmarks_test, placeholder_training_mode, submit_config)
 
     sess = tf.get_default_session()
 

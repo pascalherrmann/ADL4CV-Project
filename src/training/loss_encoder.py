@@ -40,6 +40,7 @@ def E_loss(E, G, D, E_lm, E_rig, Dec_rig, perceptual_model, real_portraits, shuf
 
     # 1
     w = E.get_output_for(real_portraits, phase=True)
+    w = tf.reshape(w, [real_portraits.shape[0], 12, 512])
 
     # 2
     l = E_rig.get_output_for(w)
@@ -49,12 +50,17 @@ def E_loss(E, G, D, E_lm, E_rig, Dec_rig, perceptual_model, real_portraits, shuf
 
     # 4
     diff = Dec_rig.get_output_for(l, p)
+    diff = tf.reshape(diff, [real_portraits.shape[0], 12, 512])
+
 
     # 5
-    w_manipulated = w + diff
+    w_manipulated_tensor = w + diff
+
+    # w should be of shape [batch, 12, 512]
+    # diff should be of shape:
+
 
     #
-    w_manipulated_tensor = tf.reshape(w_manipulated, [reals.shape[0], num_layers, latent_dim])
     img_manipulated = G.components.synthesis.get_output_for(w_manipulated_tensor, randomize_noise=False)
     manipulated_fake_scores_out = fp32(D.get_output_for(img_manipulated, shuffled_landmarks, None))
 
@@ -65,11 +71,12 @@ def E_loss(E, G, D, E_lm, E_rig, Dec_rig, perceptual_model, real_portraits, shuf
     #
     ##
 
-    l_manipulated= E_rig.get_output_for(w_manipulated)
+    l_manipulated= E_rig.get_output_for(w_manipulated_tensor)
     p_original = E_lm.get_output_for(real_landmarks)
     diff_cycle =  Dec_rig.get_output_for(l_manipulated, p_original)
-    w_reconstructed = w_manipulated + diff_cycle
-    w_reconstructed_tensor = tf.reshape(w_reconstructed, [reals.shape[0], num_layers, latent_dim])
+    diff_cycle = tf.reshape(diff_cycle, [real_portraits.shape[0], 12, 512])
+    w_reconstructed = w_manipulated_tensor + diff_cycle
+    w_reconstructed_tensor = tf.reshape(w_reconstructed, [real_portraits.shape[0], 12, 512])
     img_reconstructed = G.components.synthesis.get_output_for(w_reconstructed_tensor, randomize_noise=False)
     reconstructed_fake_scores_out = fp32(D.get_output_for(img_reconstructed, real_landmarks, None))
 
@@ -124,16 +131,19 @@ def D_logistic_simplegp(E, G, D, E_lm, E_rig, Dec_rig, real_portraits, shuffled_
     # generate fakes
     # 1
     w = E.get_output_for(shuffled_portraits, phase=True)
+    w = tf.reshape(w, [real_portraits.shape[0], 12, 512])
+
     # 2
     l = E_rig.get_output_for(w)
     # 3
     p = E_lm.get_output_for(real_landmarks)
     # 4
     diff = Dec_rig.get_output_for(l, p)
+    diff = tf.reshape(diff, [real_portraits.shape[0], 12, 512])
     # 5
     w_manipulated = w + diff
     #
-    w_manipulated_tensor = tf.reshape(w_manipulated, [reals.shape[0], num_layers, latent_dim])
+    w_manipulated_tensor = tf.reshape(w_manipulated, [real_portraits.shape[0], num_layers, latent_dim])
     fake_X = G.components.synthesis.get_output_for(w_manipulated_tensor, randomize_noise=False)
 
     real_scores_out = fp32(D.get_output_for(real_portraits, real_landmarks, None)) # real portraits, real landmarks

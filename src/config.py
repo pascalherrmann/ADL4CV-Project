@@ -27,7 +27,7 @@ DATA_DIR = "/content/gdrive/My Drive/Public/tensorboards_shared/split_dataset/tr
 TEST_DATA_DIR = "/content/gdrive/My Drive/Public/tensorboards_shared/split_dataset/test/dataset_tfrecords0-r07.tfrecords"
 PICKLE_DIR = "/content/gdrive/My Drive/Public/tensorboards_shared/Training_Decoder_TF/00000-sgan-ffhq128-1gpu/network-snapshot-011489.pkl"
 
-ENCODER_PICKLE_DIR = "/content/gdrive/My Drive/Public/tensorboards_shared/run/p/24b_higher_rec_scaling/snapshots/network-snapshot-01040128.pkl"
+ENCODER_PICKLE_DIR = None
 # Encoder
 GDRIVE_PATH = "/content/gdrive/My Drive/Public/tensorboards_shared"
 

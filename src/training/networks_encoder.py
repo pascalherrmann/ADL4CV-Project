@@ -144,32 +144,33 @@ def Encoder(input_lm, size=128, filter=64, filter_max=512, num_layers=12, phase=
             net = residual_block_bn(net, fin=nf1, fout=nf2, phase=phase, scope=name_scope)
 
         with tf.variable_scope('encoder_fc'):
-            latent_w = dense(net, fmaps=160, num_layers, gain=1, use_wscale=False)
+            latent_w = dense(net, fmaps=160, gain=1, use_wscale=False)
             latent_w = bn(latent_w, phase=phase, name='fc_1')
 
         return latent_w # landmark embedding p of shape 180
 
 
-def Stylerig_Encoder(input_w, size=128, filter=64, filter_max=512, num_layers=12, phase=True, **kwargs):
+def StyleRig_Encoder(input_w, **kwargs):
     input_w.set_shape([None, 12, 512])
-    input_w = tf.reshape(input_w, [input_w.shape[0], 12, 1, 512])
+    input_w = tf.reshape(input_w, [-1, 12, 1, 512])
 
     with tf.variable_scope('stylerig_encoder'):
         with tf.variable_scope('stylerig_encoder_fc'):
-            latent_w = linear_independent_w_to_l(input_w):
+            latent_w = linear_independent_w_to_l(input_w)
         return latent_w
 
 
-def Stylerig_Decoder(input_l, input_p):
+def StyleRig_Decoder(input_l, input_p, **kwargs):
 
     input_l.set_shape([None, 12, 1, 32])
     input_p.set_shape([None, 160])
-    input_p = tf.reshape(input_p, [input_p.shape[0], 1, 1, 160])
+    input_p = tf.reshape(input_p, [-1, 1, 1, 160])
     input_p = tf.tile(input_p, [1,12,1,1])
-    input = tf.concat([input_l, input_p], axis=3)
+    input_final = tf.concat([input_l, input_p], axis=3)
 
     with tf.variable_scope('stylerig_decoder'):
         with tf.variable_scope('stylerig_decoder_fc'):
             # concatenate l and w
-            w_diff = get_matrix(input_p, 512, 12, gain=np.sqrt(2), use_wscale=False):
+            w_diff = linear_independent_p_l_to_diff(input_final)
+
         return w_diff
