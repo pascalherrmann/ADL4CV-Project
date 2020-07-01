@@ -197,7 +197,7 @@ def training_loop(
             '''
             Load Encoder & Load Generator.
             '''
-            E, G, _, Gs = misc.load_pkl(network_pkl)
+            E, G, _, Gs = misc.load_pkl("/content/gdrive/My Drive/Public/tensorboards_shared/Training_Encoder_X/128_Standard/snapshots/network-snapshot-02340288.pkl")
 
             # create landmark encoder
             E_lm = tflib.Network('E_lm', size=submit_config.image_size, filter=64, filter_max=1024, num_layers=num_layers, phase=True, **Encoder_args)
