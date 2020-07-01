@@ -19,6 +19,16 @@ def dense(x, fmaps, gain=np.sqrt(2), use_wscale=False):
     w = tf.cast(w, x.dtype)
     return tf.matmul(x, w)
 
+# apply a individual dense layer to each channel of the input (along axis=1)
+# input: w of shape [batch, num_channels, input_filters]
+# output of shape [batch, num_channels, output_filters]
+def channel_independent_dense(x, output_filters, num_channels):
+    output_list = []
+    for i in range(num_channels):
+        x_i = x[:,i, :]
+        output_list.append(dense(x_i, fmaps=output_filters, gain=1, use_wscale=False))
+    return tf.concat(output_list, axis=1)
+
 
 def conv2d(x, fmaps, kernel, gain=np.sqrt(2), use_wscale=False):
     assert kernel >= 1 and kernel % 2 == 1
@@ -111,8 +121,6 @@ def Encoder(embedded_w, input_landmarks, size=128, filter=64, filter_max=512, nu
     # define input shapes for the network
     # todo: aktuell am imput img nix verändert!!!
     embedded_w.set_shape([None, num_layers, 512])
-    embedded_w = tf.transpose(embedded_w, perm=[0, 2, 1])
-    embedded_w = tf.expand_dims(embedded_w, 3)
 
     input_landmarks.set_shape([None, 3, size, size])
     
@@ -133,22 +141,21 @@ def Encoder(embedded_w, input_landmarks, size=128, filter=64, filter_max=512, nu
             net = residual_block_bn(net, fin=nf1, fout=nf2, phase=phase, scope=name_scope)
 
         with tf.variable_scope('landmark_encoder_fc'):
-            lm_context = dense(net, fmaps=32*num_layers, gain=1, use_wscale=False)
+            lm_context = dense(net, fmaps=160, gain=1, use_wscale=False)
             lm_context = leaky_relu(bn(lm_context, phase=phase, name='bn_landmark_encoder'))
-            lm_context = tf.reshape(lm_context, [batch_size, 32, num_layers, 1])
+            lm_context = tf.reshape(lm_context, [batch_size, 1, 160])
+            lm_context = tf.tile(lm_context, [1,12,1])
         
         with tf.variable_scope('latent_code_encoder'):
-            w_context = conv2d(embedded_w, fmaps=32, kernel=1, use_wscale=False)
+            w_context = channel_independent_dense(embedded_w, 32, num_layers)
             w_context = leaky_relu(bn(w_context, phase=phase, name='bn_latent_code_encoder'))
             
-        concatenated_context = tf.concat((w_context, lm_context), axis=1)
+        concatenated_context = tf.concat((w_context, lm_context), axis=2)
         
         with tf.variable_scope('decoder'):
-            latent_modifier = conv2d(concatenated_context, fmaps=512, kernel=1, use_wscale=False)
+            latent_modifier = channel_independent_dense(concatenated_context, 512, num_layers)
             latent_modifier = bn(latent_modifier, phase=phase, name='bn_decoder')
         
         latent_w = tf.math.add(embedded_w, latent_modifier)
-        latent_w = tf.squeeze(latent_w, 3)
-        latent_w = tf.transpose(latent_w, perm=[0, 2, 1])
         
         return latent_w
