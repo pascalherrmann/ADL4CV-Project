@@ -103,9 +103,28 @@ def test(E, Gs, ph_portraits, ph_landmarks, training_mode, submit_config):
                 '''
                 portraits = in_portraits_gpu
 
-                latent_w = E.get_output_for(portraits, in_landmarks_gpu, phase=False)
-                latent_wp = tf.reshape(latent_w, [portraits.shape[0], num_layers, latent_dim])
-                fake_X_val = Gs.components.synthesis.get_output_for(latent_wp, randomize_noise=False)
+
+
+
+
+                # generate fakes
+                # 1
+                w = E.get_output_for(portraits, phase=True)
+                # 2
+                l = E_rig.get_output_for(w)
+                # 3
+                p = E_lm.get_output_for(in_landmarks_gpu)
+                # 4
+                diff = Dec_rig.get_output_for(l, p)
+                # 5
+                w_manipulated = w + diff
+                #
+                w_manipulated_tensor = tf.reshape(w_manipulated, [reals.shape[0], num_layers, latent_dim])
+                fake_X_val = G.components.synthesis.get_output_for(w_manipulated_tensor, randomize_noise=False)
+
+
+
+
                 out_split.append(fake_X_val)
 
         with tf.device("/cpu:0"):
@@ -162,29 +181,52 @@ def training_loop(
             print("="*60 + "\nLOADED PRE-TRAINED NETWORK!!!\n" + "="*60)
             start = int(network_pkl.split('-')[-1].split('.')[0]) // submit_config.batch_size
             print('Start: ', start)
+
+            # now: create new networks
+            E_LM = tflib.Network('E_LM',  # name of the network how we call it
+                              num_channels=3, resolution=128, label_size=0,  #some needed for this build function
+                              func_name="training.networks_encoder.Encoder") # function of that network. more was not passed in d_args!
+
+
+            #
         else:
             print('Constructing networks...')
             G, _, Gs = misc.load_pkl(decoder_pkl.decoder_pkl) # don't use pre-trained discriminator!
             num_layers = Gs.components.synthesis.input_shape[1]
 
-            # here we add a new discriminator!
+            '''
+            Load Encoder & Load Generator.
+            '''
+            E, G, _, Gs = misc.load_pkl(network_pkl)
+
+            # create landmark encoder
+            E_lm = tflib.Network('E_lm', size=submit_config.image_size, filter=64, filter_max=1024, num_layers=num_layers, phase=True, **Encoder_args)
+
+
+            # create: conditional discriminator,
             D = tflib.Network('D',  # name of the network how we call it
                               num_channels=3, resolution=128, label_size=0,  #some needed for this build function
                               func_name="training.networks_stylegan.D_basic") # function of that network. more was not passed in d_args!
                               # input is not passed here (just construction - note that we do not call the actual function!). Instead, network will inspect build function and require it for the get_output_for function.
+
+            # create: riggan encoder + decoder
+            E_rig = tflib.Network('E_rig', func_name="training.networks_stylegan.StyleRig_Encoder")
+            Dec_rig = tflib.Network('D_rig', func_name="training.networks_stylegan.StyleRig_Decoder")
+
             print("Created new Discriminator!")
 
-            E = tflib.Network('E', size=submit_config.image_size, filter=64, filter_max=1024, num_layers=num_layers, phase=True, **Encoder_args)
             start = 0
 
-    E.print_layers(); Gs.print_layers(); D.print_layers()
+    E_lm.print_layers(); Gs.print_layers(); D.print_layers(); E_rig.print_layers(); D_rig.print_layers()
 
     global_step0 = tf.Variable(start, trainable=False, name='learning_rate_step')
     learning_rate = tf.train.exponential_decay(lr_args.learning_rate, global_step0, lr_args.decay_step,
                                                lr_args.decay_rate, staircase=lr_args.stair)
     add_global0 = global_step0.assign_add(1)
 
-    E_opt = tflib.Optimizer(name='TrainE', learning_rate=learning_rate, **E_opt_args)
+    E_lm_opt = tflib.Optimizer(name='TrainE_lm', learning_rate=learning_rate, **E_opt_args)
+    E_rig_opt = tflib.Optimizer(name='Train_E_rig', learning_rate=learning_rate, **E_opt_args)
+    Dec_rig_opt = tflib.Optimizer(name='Train_Dec_rig', learning_rate=learning_rate, **E_opt_args)
     D_opt = tflib.Optimizer(name='TrainD', learning_rate=learning_rate, **D_opt_args)
 
     E_loss_rec = 0.
@@ -198,6 +240,11 @@ def training_loop(
             E_gpu = E if gpu == 0 else E.clone(E.name + '_shadow')
             D_gpu = D if gpu == 0 else D.clone(D.name + '_shadow')
             G_gpu = Gs if gpu == 0 else Gs.clone(Gs.name + '_shadow')
+
+            E_lm_gpu = E_lm if gpu == 0 else E_lm.clone(E_lm.name + '_shadow')
+            E_rig_gpu = E_rig if gpu == 0 else E_rig.clone(E_rig.name + '_shadow')
+            Dec_rig_gpu = Dec_rig if gpu == 0 else Dec_rig.clone(Dec_rig.name + '_shadow')
+
             perceptual_model = PerceptualModel(img_size=[E_loss_args.perceptual_img_size, E_loss_args.perceptual_img_size], multi_layers=False)
             real_portraits_gpu = process_reals(real_split_portraits[gpu], mirror_augment, drange_data, drange_net)
             shuffled_portraits_gpu = process_reals(real_split_shuffled[gpu], mirror_augment, drange_data, drange_net)
@@ -205,16 +252,18 @@ def training_loop(
             shuffled_landmarks_gpu = process_reals(real_split_lm_shuffled[gpu], mirror_augment, drange_data, drange_net)
 
             with tf.name_scope('E_loss'), tf.control_dependencies(None):
-                E_loss, recon_loss, adv_loss = dnnlib.util.call_func_by_name(E=E_gpu, G=G_gpu, D=D_gpu, perceptual_model=perceptual_model, real_portraits=real_portraits_gpu, shuffled_portraits=shuffled_portraits_gpu, real_landmarks=real_landmarks_gpu, shuffled_landmarks=shuffled_landmarks_gpu, training_mode=placeholder_training_mode, **E_loss_args) # change signature in loss
+                E_loss, recon_loss, adv_loss = dnnlib.util.call_func_by_name(E=E_gpu, G=G_gpu, D=D_gpue, E_lm=E_lm_gpu, E_rig=E_rig_gpu, Dec_rig=Dec_rig_gpu, perceptual_model=perceptual_model, real_portraits=real_portraits_gpu, shuffled_portraits=shuffled_portraits_gpu, real_landmarks=real_landmarks_gpu, shuffled_landmarks=shuffled_landmarks_gpu, training_mode=placeholder_training_mode, **E_loss_args) # change signature in loss
                 E_loss_rec += recon_loss
                 E_loss_adv += adv_loss
             with tf.name_scope('D_loss'), tf.control_dependencies(None):
-                D_loss, loss_fake, loss_real, loss_gp = dnnlib.util.call_func_by_name(E=E_gpu, G=G_gpu, D=D_gpu, real_portraits=real_portraits_gpu, shuffled_portraits=shuffled_portraits_gpu, real_landmarks=real_landmarks_gpu, training_mode=placeholder_training_mode, **D_loss_args) # change signature in ...
+                D_loss, loss_fake, loss_real, loss_gp = dnnlib.util.call_func_by_name(E=E_gpu, G=G_gpu, D=D_gpue, E_lm=E_lm_gpu, E_rig=E_rig_gpu, Dec_rig=Dec_rig_gpu, real_portraits=real_portraits_gpu, shuffled_portraits=shuffled_portraits_gpu, real_landmarks=real_landmarks_gpu, training_mode=placeholder_training_mode, **D_loss_args) # change signature in ...
                 D_loss_real += loss_real
                 D_loss_fake += loss_fake
                 D_loss_grad += loss_gp
             with tf.control_dependencies([add_global0]):
-                E_opt.register_gradients(E_loss, E_gpu.trainables)
+                E_lm_opt.register_gradients(E_loss, E_gpu.trainables)
+                E_rig_opt.register_gradients(E_loss, E_gpu.trainables)
+                Dec_rig_opt.register_gradients(E_loss, E_gpu.trainables)
                 D_opt.register_gradients(D_loss, D_gpu.trainables)
 
     E_loss_rec /= submit_config.num_gpus
@@ -223,7 +272,9 @@ def training_loop(
     D_loss_fake /= submit_config.num_gpus
     D_loss_grad /= submit_config.num_gpus
 
-    E_train_op = E_opt.apply_updates()
+    E_train_lm_op = E_lm_opt.apply_updates()
+    E_train_rig_op = E_rig_opt.apply_updates()
+    Dec_train_rig_op = Dec_rig_opt.apply_updates()
     D_train_op = D_opt.apply_updates()
 
     print('building testing graph...')
@@ -269,8 +320,9 @@ def training_loop(
         feed_dict_1 = {placeholder_real_portraits_train: batch_portraits, placeholder_real_landmarks_train: batch_landmarks, placeholder_real_shuffled_train:batch_shuffled, placeholder_landmarks_shuffled_train:batch_lm_shuffled, placeholder_training_mode: "appearance" if it % 2 == 0 else "pose"}
 
         # here we query these encoder- and discriminator losses. as input we provide: batch_stacks = batch of images + landmarks.
-        _, recon_, adv_ = sess.run([E_train_op, E_loss_rec, E_loss_adv], feed_dict_1)
+        _, _, _, recon_, adv_ = sess.run([E_train_lm_op,E_train_rig_op, Dec_train_rig_op, E_loss_rec, E_loss_adv], feed_dict_1)
         _, d_r_, d_f_, d_g_ = sess.run([D_train_op, D_loss_real, D_loss_fake, D_loss_grad], feed_dict_1)
+
 
         cur_nimg += submit_config.batch_size
 

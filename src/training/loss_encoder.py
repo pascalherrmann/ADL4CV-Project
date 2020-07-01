@@ -17,58 +17,62 @@ def fp32(*values):
 
 #----------------------------------------------------------------------------
 # Encoder loss function .
-def E_loss(E, G, D, perceptual_model, real_portraits, shuffled_portraits, real_landmarks, shuffled_landmarks, training_mode, feature_scale=0.00005, D_scale=0.1, perceptual_img_size=256):
+def E_loss(E, G, D, E_lm, E_rig, Dec_rig, perceptual_model, real_portraits, shuffled_portraits, real_landmarks, shuffled_landmarks, training_mode, feature_scale=0.00005, D_scale=0.1, perceptual_img_size=256):
 
     '''
-    # Only needed for Alternating Training
-    with tf.device("/cpu:0"):
-        appearance_flag = tf.math.equal(training_mode, "appearance")
+    Rignet - First Try:
 
-    reals = tf.cond(appearance_flag, lambda: real_portraits, lambda: shuffled_portraits)
+    1. Take source image and embedd it into W using pre-trained vanilla-encoder. => w [12*512]
+    2. Rignet-Encoder: Take w and embedd into l => [12*32]
+    3. Take target landmarks and embedd into p => p [1x160]
+    4. Rigner-Decoder: take p, l -> gt diff [12*512]
+    5. add to w.
+
+    then:
+    6. feed in generator
+
+    We need:
+    * Encoder Pretrained
+    * Encoder_LM for Landmarks, new!!!
+    * Matrix w_to_l  12*512*32
+    * Matrix pl_to_diff 12*(32+160)*512
     '''
-
-
-    '''
-    reals = tf.case(
-                [(tf.math.equal(training_mode, "appearance"), lambda: real_portraits), 
-                 (tf.math.equal(training_mode, "pose"), lambda: shuffled_portraits)],
-                  default = lambda: real_portraits*0, exclusive=True)
-    '''
-
-
-
-    '''
-    # CYCLE CONSISTENCY
-    * 1: Feed Original Portrait + SHUFFLED Landmark into Encoder -> Get W for "Manipulated Image"
-    * 2: Feed Manipulated Image + SHUFFLED Landmark into Cond. Discriminator -> Fake scores manpulated
-    * 3: Then: Feed Manipulated Image + Original Landmark into Encoder -> Get W for "Reconstructed Image"
-    * 4: Feed "Reconstructed Image" + ORIGINAL Landmark into Cond. Discriminator -> reconstructed image
-    * 5: + Take Reconsturction & Perceptual Loss between Reconstructed & Original Image
-
-
-    Davor haben wir immer shuffled portraits übergeben. Jetzt brauchen wir aber: Shuffled Landmarks....
-    '''
-    reals = real_portraits
-    num_layers, latent_dim = G.components.synthesis.input_shape[1:3]
-
 
     # 1
-    w_manipulated = E.get_output_for(real_portraits, shuffled_landmarks, phase=True)
-    w_manipulated_tensor = tf.reshape(w_manipulated, [reals.shape[0], num_layers, latent_dim])
-    img_manipulated = G.components.synthesis.get_output_for(w_manipulated_tensor, randomize_noise=False)
+    w = E.get_output_for(real_portraits, phase=True)
 
     # 2
-    manipulated_fake_scores_out = fp32(D.get_output_for(img_manipulated, shuffled_landmarks, None))
+    l = E_rig.get_output_for(w)
 
     # 3
-    w_reconstructed = E.get_output_for(img_manipulated, real_landmarks, phase=True)
-    w_reconstructed_tensor = tf.reshape(w_reconstructed, [reals.shape[0], num_layers, latent_dim])
-    img_reconstructed = G.components.synthesis.get_output_for(w_reconstructed_tensor, randomize_noise=False)
+    p = E_lm.get_output_for(shuffled_landmarks)
 
     # 4
-    reconstructed_fake_scores_out = fp32(D.get_output_for(img_reconstructed, real_landmarks, None))
+    diff = Dec_rig.get_output_for(l, p)
 
     # 5
+    w_manipulated = w + diff
+
+    #
+    w_manipulated_tensor = tf.reshape(w_manipulated, [reals.shape[0], num_layers, latent_dim])
+    img_manipulated = G.components.synthesis.get_output_for(w_manipulated_tensor, randomize_noise=False)
+    manipulated_fake_scores_out = fp32(D.get_output_for(img_manipulated, shuffled_landmarks, None))
+
+
+    ##
+    #
+    # Then: Cycle consistency. Map everything back.
+    #
+    ##
+
+    l_manipulated= E_rig.get_output_for(w_manipulated)
+    p_original = E_lm.get_output_for(real_landmarks)
+    diff_cycle =  Dec_rig.get_output_for(l_manipulated, p_original)
+    w_reconstructed = w_manipulated + diff_cycle
+    w_reconstructed_tensor = tf.reshape(w_reconstructed, [reals.shape[0], num_layers, latent_dim])
+    img_reconstructed = G.components.synthesis.get_output_for(w_reconstructed_tensor, randomize_noise=False)
+    reconstructed_fake_scores_out = fp32(D.get_output_for(img_reconstructed, real_landmarks, None))
+
     with tf.variable_scope('recon_loss'):
         # feature
         vgg16_input_real = tf.transpose(real_portraits, perm=[0, 2, 3, 1])
@@ -113,25 +117,25 @@ def E_loss(E, G, D, perceptual_model, real_portraits, shuffled_portraits, real_l
 
 #----------------------------------------------------------------------------
 # Discriminator loss function.
-def D_logistic_simplegp(E, G, D, real_portraits, shuffled_portraits, real_landmarks, training_mode, r1_gamma=10.0):
+def D_logistic_simplegp(E, G, D, E_lm, E_rig, Dec_rig, real_portraits, shuffled_portraits, real_landmarks, training_mode, r1_gamma=10.0):
 
     num_layers, latent_dim = G.components.synthesis.input_shape[1:3]
 
-    with tf.device("/cpu:0"):
-            appearance_flag = tf.math.equal(training_mode, "appearance")
+    # generate fakes
+    # 1
+    w = E.get_output_for(shuffled_portraits, phase=True)
+    # 2
+    l = E_rig.get_output_for(w)
+    # 3
+    p = E_lm.get_output_for(real_landmarks)
+    # 4
+    diff = Dec_rig.get_output_for(l, p)
+    # 5
+    w_manipulated = w + diff
+    #
+    w_manipulated_tensor = tf.reshape(w_manipulated, [reals.shape[0], num_layers, latent_dim])
+    fake_X = G.components.synthesis.get_output_for(w_manipulated_tensor, randomize_noise=False)
 
-    portraits = tf.cond(appearance_flag, lambda: real_portraits, lambda: shuffled_portraits)
-
-    '''
-    portraits = tf.case(
-                [(tf.math.equal(training_mode, "appearance"), lambda: real_portraits), 
-                 (tf.math.equal(training_mode, "pose"), lambda: shuffled_portraits)],
-                  default = lambda: real_portraits*0, exclusive=True)
-    '''
-
-    latent_w = E.get_output_for(portraits, real_landmarks, phase=True)
-    latent_wp = tf.reshape(latent_w, [portraits.shape[0], num_layers, latent_dim]) # make synthetic from shuffled ones!
-    fake_X = G.components.synthesis.get_output_for(latent_wp, randomize_noise=False)
     real_scores_out = fp32(D.get_output_for(real_portraits, real_landmarks, None)) # real portraits, real landmarks
     fake_scores_out = fp32(D.get_output_for(fake_X, real_landmarks, None)) # synthetic portaits, real landmarks
 
