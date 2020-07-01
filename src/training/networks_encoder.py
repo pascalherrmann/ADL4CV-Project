@@ -133,7 +133,7 @@ def Encoder(embedded_w, input_landmarks, size=128, filter=64, filter_max=512, nu
             net = residual_block_bn(net, fin=nf1, fout=nf2, phase=phase, scope=name_scope)
 
         with tf.variable_scope('landmark_encoder_fc'):
-            lm_context = dense(net, fmaps=32*num_layers, gain=1, use_wscale=False)
+            lm_context = dense(net, fmaps=64*num_layers, gain=1, use_wscale=False)
             lm_context = leaky_relu(bn(lm_context, phase=phase, name='bn_landmark_encoder'))
             lm_context = tf.reshape(lm_context, [batch_size, 64, num_layers, 1])
         
