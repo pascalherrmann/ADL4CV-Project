@@ -118,6 +118,34 @@ def test(E, Gs, Inv, ph_portraits, ph_landmarks, training_mode, submit_config):
 
     return out_expr
 
+def test_inversion(E, Gs, Inv, ph_portraits, ph_landmarks, training_mode, submit_config):
+    with tf.name_scope("Run"), tf.control_dependencies(None):
+        with tf.device("/cpu:0"):
+            in_split_portraits = tf.split(ph_portraits, num_or_size_splits=submit_config.num_gpus, axis=0)
+
+        out_split = []
+        num_layers, latent_dim = Gs.components.synthesis.input_shape[1:3]
+        for gpu in range(submit_config.num_gpus):
+            with tf.device("/gpu:%d" % gpu):
+                in_portraits_gpu = in_split_portraits[gpu]
+
+                '''
+                with tf.device("/cpu:0"):
+                    appearance_flag = tf.math.equal(training_mode, "appearance")
+                portraits = tf.cond(appearance_flag, lambda: in_portraits_gpu, lambda: in_shuffled_gpu)
+                '''
+                portraits = in_portraits_gpu
+                embedded_w = Inv.get_output_for(portraits, phase=True)
+                embedded_w_tensor = tf.reshape(embedded_w, [portraits.shape[0], num_layers, latent_dim])
+                
+                inv_X_val = Gs.components.synthesis.get_output_for(embedded_w_tensor, randomize_noise=False)
+                out_split.append(inv_X_val)
+
+        with tf.device("/cpu:0"):
+            out_expr = tf.concat(out_split, axis=0)
+
+    return out_expr
+
 def sample_random_portraits(Gs, batch_size):
     random_latent_z = tf.random.normal(shape=[batch_size, 512])
     random_portraits = Gs.get_output_for(random_latent_z, np.zeros((batch_size, 0)), is_training=False)
@@ -239,6 +267,7 @@ def training_loop(
 
     print('building testing graph...')
     fake_X_val = test(E, Gs, Inv, placeholder_real_portraits_test, placeholder_real_landmarks_test, placeholder_real_shuffled_test, submit_config)
+    inv_X_val = test_inversion(E, Gs, Inv, placeholder_real_portraits_test, placeholder_real_landmarks_test, placeholder_real_shuffled_test, submit_config)
     
     #sampled_portraits_val = sample_random_portraits(Gs, submit_config.batch_size)
     #sampled_portraits_val_test = sample_random_portraits(Gs, submit_config.batch_size_test)
@@ -322,6 +351,9 @@ def training_loop(
             # also: show direct reconstruction
             samples_direct_rec = sess.run(fake_X_val, feed_dict={placeholder_real_portraits_test: batch_portraits_test, placeholder_real_landmarks_test: batch_landmarks_test})
 
+            # show results of the inverison
+            portraits_inverted = sess.run(inv_X_val, feed_dict={placeholder_real_portraits_test: batch_portraits_test, placeholder_real_landmarks_test: batch_landmarks_test})
+
             # show: original portrait, original landmark, diret reconstruction, fake landmark, manipulated, rec.
             debug_img = np.concatenate([
                     batch_landmarks_test, # original landmarks
@@ -329,7 +361,8 @@ def training_loop(
                     samples_direct_rec, # direct
                     batch_shuffled_lm_test, # shuffled landmarks
                     samples_manipulated, # manipulated images
-                    samples_reconstructed # cycle reconstructed images
+                    samples_reconstructed,
+                    portraits_inverted# cycle reconstructed images
                 ], axis=0)
 
             debug_img = adjust_pixel_range(debug_img)
