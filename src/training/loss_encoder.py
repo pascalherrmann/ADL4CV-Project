@@ -101,6 +101,7 @@ def E_loss(E, G, D, E_lm, E_rig, Dec_rig, perceptual_model, real_portraits, shuf
         recon_loss = autosummary('Loss/scores/recon_loss', recon_loss)
 
     with tf.variable_scope('adv_loss'):
+        D_scale = 1
         D_scale = autosummary('Loss/scores/d_scale', D_scale)
         adv_loss_manipulated = D_scale * tf.reduce_mean(tf.nn.softplus(-manipulated_fake_scores_out))
         adv_loss_manipulated = autosummary('Loss/scores/adv_loss_manipulated', adv_loss_manipulated)
@@ -111,7 +112,7 @@ def E_loss(E, G, D, E_lm, E_rig, Dec_rig, perceptual_model, real_portraits, shuf
     loss = tf.cond(appearance_flag, lambda: adv_loss + recon_loss, lambda: adv_loss)
     '''
 
-    loss = 2 * adv_loss_manipulated + adv_loss_reconstructed + recon_loss
+    loss = 5 * adv_loss_manipulated + adv_loss_reconstructed + recon_loss
 
     '''
     loss = tf.case(
