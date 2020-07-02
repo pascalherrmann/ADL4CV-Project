@@ -103,10 +103,10 @@ def E_loss(E, G, D, Inv, perceptual_model, real_portraits, shuffled_portraits, r
 # Discriminator loss function.
 def D_logistic_simplegp(E, G, D, Inv, real_portraits, shuffled_portraits, real_landmarks, training_flag, r1_gamma=10.0):
 
-    with tf.device("/cpu:0"):
-        appearance_flag = tf.math.equal(training_flag, "appearance")
+    #with tf.device("/cpu:0"):
+        #appearance_flag = tf.math.equal(training_flag, "appearance")
     
-    portraits = tf.cond(appearance_flag, lambda: feedthrough(real_portraits), lambda: feedthrough(shuffled_portraits))
+    portraits = shuffled_portraits#tf.cond(appearance_flag, lambda: feedthrough(real_portraits), lambda: feedthrough(shuffled_portraits))
         
     num_layers, latent_dim = G.components.synthesis.input_shape[1:3]
     embedded_w = Inv.get_output_for(portraits, phase=True)
