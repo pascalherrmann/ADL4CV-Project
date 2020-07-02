@@ -82,26 +82,10 @@ def E_loss(E, G, D, E_lm, E_rig, Dec_rig, perceptual_model, real_portraits, shuf
 
     with tf.variable_scope('recon_loss'):
         # feature
-        vgg16_input_real = tf.transpose(real_portraits, perm=[0, 2, 3, 1])
-        vgg16_input_real = tf.image.resize_images(vgg16_input_real, size=[perceptual_img_size, perceptual_img_size], method=1)
-        vgg16_input_real = ((vgg16_input_real + 1) / 2) * 255
-
-        vgg16_input_fake = tf.transpose(img_reconstructed, perm=[0, 2, 3, 1])
-        vgg16_input_fake = tf.image.resize_images(vgg16_input_fake, size=[perceptual_img_size, perceptual_img_size], method=1)
-        vgg16_input_fake = ((vgg16_input_fake + 1) / 2) * 255
-        vgg16_feature_real = perceptual_model(vgg16_input_real)
-        vgg16_feature_fake = perceptual_model(vgg16_input_fake)
-        recon_loss_feats = feature_scale * tf.reduce_mean(tf.square(vgg16_feature_real - vgg16_feature_fake))
-
-        # recon
-        recon_loss_pixel = tf.reduce_mean(tf.square(img_reconstructed - real_portraits))
-        recon_loss_feats = autosummary('Loss/scores/loss_feats', recon_loss_feats)
-        recon_loss_pixel = autosummary('Loss/scores/loss_pixel', recon_loss_pixel)
-        recon_loss = recon_loss_feats + recon_loss_pixel
-        recon_loss = autosummary('Loss/scores/recon_loss', recon_loss)
+        recon_loss = tf.reduce_mean(tf.square(w - w_reconstructed_tensor))
+        recon_loss = autosummary('Loss/scores/recon_loss_w', recon_loss)
 
     with tf.variable_scope('adv_loss'):
-        D_scale = 1
         D_scale = autosummary('Loss/scores/d_scale', D_scale)
         adv_loss_manipulated = D_scale * tf.reduce_mean(tf.nn.softplus(-manipulated_fake_scores_out))
         adv_loss_manipulated = autosummary('Loss/scores/adv_loss_manipulated', adv_loss_manipulated)
@@ -112,7 +96,7 @@ def E_loss(E, G, D, E_lm, E_rig, Dec_rig, perceptual_model, real_portraits, shuf
     loss = tf.cond(appearance_flag, lambda: adv_loss + recon_loss, lambda: adv_loss)
     '''
 
-    loss = 5 * adv_loss_manipulated + adv_loss_reconstructed + recon_loss
+    loss = adv_loss_manipulated + adv_loss_reconstructed + recon_loss
 
     '''
     loss = tf.case(
