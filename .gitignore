@@ -1,8 +1,10 @@
+.ipynb_checkpoints
+*/.ipynb_checkpoints
 __pycache__/
 *.py[cod]
 
-*.jpg
-*.png
+#*.jpg
+#*.png
 *.jpeg
 *.npy
 *.log
