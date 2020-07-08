@@ -14,9 +14,16 @@ class FaceLandmarkExtractor:
     def __init__(self):
         self.face_aligner = face_alignment.FaceAlignment(face_alignment.LandmarksType._2D, flip_input=False, device = 'cuda:0' if torch.cuda.is_available() else 'cpu')
     
-    def generate_landmark_image(self, source_image_path='', output_image_path='', resolution=128):
+    def extract_landmarks(self, source_path_or_image):
         try:
-            preds = self.face_aligner.get_landmarks_from_image(source_image_path)[0]
+            return self.face_aligner.get_landmarks_from_image(source_path_or_image)[0]
+        except:
+            print('Error: couldnt extract landmarks')
+            return None
+    
+    def generate_landmark_image(self, source_path_or_image, output_image_path='', resolution=128):
+        try:
+            preds, _ = self.extract_landmarks(source_image_path)
             input_shape = np.zeros((resolution,resolution))
             dpi = 100
             fig = plt.figure(figsize=(input_shape.shape[1]/dpi, input_shape.shape[0]/dpi), dpi = dpi)
