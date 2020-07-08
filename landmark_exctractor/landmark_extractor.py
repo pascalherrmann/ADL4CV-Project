@@ -23,7 +23,7 @@ class FaceLandmarkExtractor:
     
     def generate_landmark_image(self, source_path_or_image, output_image_path='', resolution=128):
         try:
-            preds, _ = self.extract_landmarks(source_image_path)
+            preds = self.extract_landmarks(source_path_or_image)
             input_shape = np.zeros((resolution,resolution))
             dpi = 100
             fig = plt.figure(figsize=(input_shape.shape[1]/dpi, input_shape.shape[0]/dpi), dpi = dpi)
@@ -69,7 +69,7 @@ class FaceLandmarkExtractor:
             return None
         
         data = torch.from_numpy(np.array(data)).type(dtype = torch.float)
-        return data
+        return data, preds
     
     def create_landmark_dataset(self, source_root='', output_root='', resolution=128):
         for subdir, dirs, files in os.walk(source_root):
