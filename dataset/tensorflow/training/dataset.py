@@ -14,13 +14,14 @@ def parse_tfrecord_tf(record):
     features = tf.parse_single_example(record, features={
         'shape': tf.FixedLenFeature([3], tf.int64),
         'portrait': tf.FixedLenFeature([], tf.string),
-        'landmark': tf.FixedLenFeature([], tf.string)})
+        'landmark': tf.FixedLenFeature([], tf.string),
+        'keypoints': tf.FixedLenFeature([], tf.float32),})
     portrait = tf.decode_raw(features['portrait'], tf.uint8)
     landmark = tf.decode_raw(features['landmark'], tf.uint8)
     portrait = tf.reshape(portrait, (1, features['shape'][0], features['shape'][1], features['shape'][2]))
     landmark = tf.reshape(landmark, (1, features['shape'][0], features['shape'][1], features['shape'][2]))
     data = tf.concat((portrait, landmark), axis=0)
-    return data
+    return data, features['keypoints']
 
 def parse_tfrecord_np(record):
     ex = tf.train.Example()
@@ -32,6 +33,13 @@ def parse_tfrecord_np(record):
     landmark = np.fromstring(landmark, np.uint8).reshape(1, shape[0], shape[1], shape[1])
     data = np.concatenate((portrait, landmark), axis=0) 
     return data
+
+def parse_multi_resolution_tfrecord_np(record):
+    ex = tf.train.Example()
+    ex.ParseFromString(record)
+    shape = ex.features.feature['shape'].int64_list.value # temporary pylint workaround # pylint: disable=no-member
+    data = ex.features.feature['data'].bytes_list.value[0] # temporary pylint workaround # pylint: disable=no-member
+    return np.fromstring(data, np.uint8).reshape(shape)
 
 #----------------------------------------------------------------------------
 # Dataset class that loads data from tfrecords files.
