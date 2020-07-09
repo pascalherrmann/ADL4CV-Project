@@ -34,6 +34,13 @@ def parse_tfrecord_np(record):
     data = np.concatenate((portrait, landmark), axis=0) 
     return data
 
+def parse_multi_resolution_tfrecord_tf(record):
+    features = tf.parse_single_example(record, features={
+        'shape': tf.FixedLenFeature([3], tf.int64),
+        'data': tf.FixedLenFeature([], tf.string)})
+    data = tf.decode_raw(features['data'], tf.uint8)
+    return tf.reshape(data, features['shape'])
+
 def parse_multi_resolution_tfrecord_np(record):
     ex = tf.train.Example()
     ex.ParseFromString(record)

@@ -14,7 +14,7 @@ import PIL.Image
 #import dnnlib.tflib as tflib
 
 from training import misc
-from training.dataset import parse_multi_resolution_tfrecord_np
+from training.dataset import parse_multi_resolution_tfrecord_tf
 from ..landmark_extractor import FaceLandmarkExtractor
 
 #----------------------------------------------------------------------------
@@ -343,7 +343,7 @@ def compare(tfrecord_dir_a, tfrecord_dir_b, ignore_labels):
     if not ignore_labels:
         print('Identical labels: %d / %d' % (identical_labels, idx))
 
-----------------------------------------------------------------------------
+#----------------------------------------------------------------------------
 
 def create_mnist(tfrecord_dir, mnist_dir):
     print('Loading MNIST from "%s"' % mnist_dir)
@@ -648,7 +648,7 @@ def create_from_tfrecord(tfrecord_dir, input_path, shuffle):
     
     #load tfrecord dataset
     dset = tf.data.TFRecordDataset(input_path)
-    dset = dset.map(parse_multi_resolution_tfrecord_np, num_parallel_calls=16)
+    dset = dset.map(parse_multi_resolution_tfrecord_tf, num_parallel_calls=16)
     dset = dset.batch(4375)
     train_iterator = tf.data.Iterator.from_structure(dset.output_types, dset.output_shapes)
     image_batch = train_iterator.get_next()
