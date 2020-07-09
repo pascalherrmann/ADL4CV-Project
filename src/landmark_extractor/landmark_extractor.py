@@ -8,11 +8,11 @@ import numpy as np
 import torch
 import os
 
-import face_alignment
+from landmark_exctractor.face_alignment import FaceAlignment, LandmarksType
 
 class FaceLandmarkExtractor:
     def __init__(self):
-        self.face_aligner = face_alignment.FaceAlignment(face_alignment.LandmarksType._2D, flip_input=False, device = 'cuda:0' if torch.cuda.is_available() else 'cpu')
+        self.face_aligner = FaceAlignment(LandmarksType._2D, flip_input=False, device = 'cuda:0' if torch.cuda.is_available() else 'cpu')
     
     def extract_landmarks(self, source_path_or_image):
         try:

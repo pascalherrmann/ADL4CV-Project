@@ -11,7 +11,7 @@ import numpy as np
 from scipy.spatial.distance import directed_hausdorff
 import tensorflow as tf
 import dnnlib.tflib as tflib
-from ..landmark_extractor import FaceLandmarkExtractor
+from landmark_extractor.landmark_extractor import FaceLandmarkExtractor
 
 import config
 from metrics import metric_base

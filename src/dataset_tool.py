@@ -11,11 +11,13 @@ import traceback
 import numpy as np
 import tensorflow as tf
 import PIL.Image
-#import dnnlib.tflib as tflib
+
+import dnnlib.tflib as tflib
+tflib.init_tf()
 
 from training import misc
 from training.dataset import parse_multi_resolution_tfrecord_tf
-from ..landmark_extractor import FaceLandmarkExtractor
+from landmark_extractor.landmark_extractor import FaceLandmarkExtractor
 
 #----------------------------------------------------------------------------
 
@@ -649,11 +651,18 @@ def create_from_tfrecord(tfrecord_dir, input_path, shuffle):
     #load tfrecord dataset
     dset = tf.data.TFRecordDataset(input_path)
     dset = dset.map(parse_multi_resolution_tfrecord_tf, num_parallel_calls=16)
-    dset = dset.batch(4375)
+    #dset = dset.batch(4375)
+    dset = dset.batch(16)
     train_iterator = tf.data.Iterator.from_structure(dset.output_types, dset.output_shapes)
-    image_batch = train_iterator.get_next()
+    training_init_op = train_iterator.make_initializer(dset)
+    stack_batch = train_iterator.get_next()
+    tflib.run(training_init_op)
+
+    image_batch = tflib.run(stack_batch)
 
     portrait_image = image_batch[0]
+    portrait_image = np.transpose(portrait_image, [1,2,0])
+    print(portrait_image.shape)
     resolution = portrait_image.shape[0]
     channels = portrait_image.shape[2] if portrait_image.ndim == 3 else 1
     
@@ -667,7 +676,8 @@ def create_from_tfrecord(tfrecord_dir, input_path, shuffle):
     batches = []
     batches.append(image_batch)
     for i in range(15):
-        batches.append(train_iterator.get_next())
+        image_batch = tflib.run(stack_batch)
+        batches.append(image_batch)
     
     #set up parallel file writing
     num_threads=16
@@ -688,7 +698,7 @@ def create_from_tfrecord(tfrecord_dir, input_path, shuffle):
         )
     
         thread_process = multiprocessing.Process(
-            target=create_dataset_subset,
+            target=create_dataset_subset_from_tfrecord,
             args=params
         )
     
@@ -719,6 +729,7 @@ def create_dataset_subset_from_tfrecord(tfrecord_dir, batch, channels, resolutio
         for idx in range(len(batch)):
             try:
                 img1 = batch[idx]
+                img1 = np.transpose(img1, [1,2,0])
                 img2, keypoints = landmark_extractor.generate_landmark_image(source_path_or_image=img1, resolution=resolution)
                 if channels == 1:
                     img1 = img1[np.newaxis, :, :] # HW => CHW
