@@ -247,7 +247,7 @@ class ThreadPool(object):
         while retire_idx[0] < len(results):
             for res in retire_result(): yield res
 
-----------------------------------------------------------------------------
+#----------------------------------------------------------------------------
 
 def display(tfrecord_dir):
     print('Loading dataset "%s"' % tfrecord_dir)
@@ -273,7 +273,7 @@ def display(tfrecord_dir):
             break
     print('\nDisplayed %d images.' % idx)
 
-----------------------------------------------------------------------------
+#----------------------------------------------------------------------------
 
 def extract(tfrecord_dir, output_dir):
     print('Loading dataset "%s"' % tfrecord_dir)
@@ -300,7 +300,7 @@ def extract(tfrecord_dir, output_dir):
         idx += 1
     print('Extracted %d images.' % idx)
 
-----------------------------------------------------------------------------
+#----------------------------------------------------------------------------
 
 def compare(tfrecord_dir_a, tfrecord_dir_b, ignore_labels):
     max_label_size = 0 if ignore_labels else 'full'

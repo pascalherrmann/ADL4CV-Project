@@ -1,30 +1,40 @@
-# Copyright (c) 2019, NVIDIA CORPORATION. All rights reserved.
-#
-# This work is licensed under the Creative Commons Attribution-NonCommercial
-# 4.0 International License. To view a copy of this license, visit
-# http://creativecommons.org/licenses/by-nc/4.0/ or send a letter to
-# Creative Commons, PO Box 1866, Mountain View, CA 94042, USA.
-
 """Multi-resolution input data pipeline."""
 
 import os
 import glob
 import numpy as np
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
 import dnnlib
-import dnnlib.tflib as tflib
+#import dnnlib.tflib as tflib
 
 #----------------------------------------------------------------------------
-# Parse individual image from a tfrecords file.
+# Parse individual pair of images image from a tfrecords file.
 
 def parse_tfrecord_tf(record):
     features = tf.parse_single_example(record, features={
         'shape': tf.FixedLenFeature([3], tf.int64),
-        'data': tf.FixedLenFeature([], tf.string)})
-    data = tf.decode_raw(features['data'], tf.uint8)
-    return tf.reshape(data, features['shape'])
+        'portrait': tf.FixedLenFeature([], tf.string),
+        'landmark': tf.FixedLenFeature([], tf.string),
+        'keypoints': tf.FixedLenFeature([], tf.float32),})
+    portrait = tf.decode_raw(features['portrait'], tf.uint8)
+    landmark = tf.decode_raw(features['landmark'], tf.uint8)
+    portrait = tf.reshape(portrait, (1, features['shape'][0], features['shape'][1], features['shape'][2]))
+    landmark = tf.reshape(landmark, (1, features['shape'][0], features['shape'][1], features['shape'][2]))
+    data = tf.concat((portrait, landmark), axis=0)
+    return data, features['keypoints']
 
 def parse_tfrecord_np(record):
+    ex = tf.train.Example()
+    ex.ParseFromString(record)
+    shape = ex.features.feature['shape'].int64_list.value # temporary pylint workaround # pylint: disable=no-member
+    portrait = ex.features.feature['portrait'].bytes_list.value[0] # temporary pylint workaround # pylint: disable=no-member
+    landmark = ex.features.feature['landmark'].bytes_list.value[0] # temporary pylint workaround # pylint: disable=no-member
+    portrait = np.fromstring(portrait, np.uint8).reshape(1, shape[0], shape[1], shape[1])
+    landmark = np.fromstring(landmark, np.uint8).reshape(1, shape[0], shape[1], shape[1])
+    data = np.concatenate((portrait, landmark), axis=0) 
+    return data
+
+def parse_multi_resolution_tfrecord_np(record):
     ex = tf.train.Example()
     ex.ParseFromString(record)
     shape = ex.features.feature['shape'].int64_list.value # temporary pylint workaround # pylint: disable=no-member
@@ -76,7 +86,6 @@ class TFRecordDataset:
             for record in tf.python_io.tf_record_iterator(tfr_file, tfr_opt):
                 tfr_shapes.append(parse_tfrecord_np(record).shape)
                 break
-
         # Autodetect label filename.
         if self.label_file is None:
             guess = sorted(glob.glob(os.path.join(self.tfrecord_dir, '*.labels')))
@@ -91,11 +100,12 @@ class TFRecordDataset:
         max_shape = max(tfr_shapes, key=np.prod)
         self.resolution = resolution if resolution is not None else max_shape[1]
         self.resolution_log2 = int(np.log2(self.resolution))
-        self.shape = [max_shape[0], self.resolution, self.resolution]
-        tfr_lods = [self.resolution_log2 - int(np.log2(shape[1])) for shape in tfr_shapes]
-        assert all(shape[0] == max_shape[0] for shape in tfr_shapes)
-        assert all(shape[1] == shape[2] for shape in tfr_shapes)
-        assert all(shape[1] == self.resolution // (2**lod) for shape, lod in zip(tfr_shapes, tfr_lods))
+        print(max_shape)
+        self.shape = [max_shape[1], self.resolution, self.resolution]
+        tfr_lods = [0]#[self.resolution_log2 - int(np.log2(shape[1])) for shape in tfr_shapes]
+        assert all(shape[1] == max_shape[1] for shape in tfr_shapes)
+        assert all(shape[2] == shape[3] for shape in tfr_shapes)
+        assert all(shape[2] == self.resolution // (2**lod) for shape, lod in zip(tfr_shapes, tfr_lods))
         assert all(lod in tfr_lods for lod in range(self.resolution_log2 - 1))
 
         # Load labels.
@@ -112,7 +122,7 @@ class TFRecordDataset:
         # Build TF expressions.
         with tf.name_scope('Dataset'), tf.device('/cpu:0'):
             self._tf_minibatch_in = tf.placeholder(tf.int64, name='minibatch_in', shape=[])
-            self._tf_labels_var = tflib.create_var_with_large_initial_value(self._np_labels, name='labels_var')
+            #self._tf_labels_var = tflib.create_var_with_large_initial_value(self._np_labels, name='labels_var')
             self._tf_labels_dataset = tf.data.Dataset.from_tensor_slices(self._tf_labels_var)
             for tfr_file, tfr_shape, tfr_lod in zip(tfr_files, tfr_shapes, tfr_lods):
                 if tfr_lod < 0:
@@ -146,11 +156,11 @@ class TFRecordDataset:
         return self._tf_iterator.get_next()
 
     # Get next minibatch as NumPy arrays.
-    def get_minibatch_np(self, minibatch_size, lod=0): # => images, labels
-        self.configure(minibatch_size, lod)
-        if self._tf_minibatch_np is None:
-            self._tf_minibatch_np = self.get_minibatch_tf()
-        return tflib.run(self._tf_minibatch_np)
+#    def get_minibatch_np(self, minibatch_size, lod=0): # => images, labels
+#        self.configure(minibatch_size, lod)
+#        if self._tf_minibatch_np is None:
+#            self._tf_minibatch_np = self.get_minibatch_tf()
+#        return tflib.run(self._tf_minibatch_np)
 
     # Get random labels as TensorFlow expression.
     def get_random_labels_tf(self, minibatch_size): # => labels
@@ -168,59 +178,59 @@ class TFRecordDataset:
 #----------------------------------------------------------------------------
 # Base class for datasets that are generated on the fly.
 
-class SyntheticDataset:
-    def __init__(self, resolution=1024, num_channels=3, dtype='uint8', dynamic_range=[0,255], label_size=0, label_dtype='float32'):
-        self.resolution         = resolution
-        self.resolution_log2    = int(np.log2(resolution))
-        self.shape              = [num_channels, resolution, resolution]
-        self.dtype              = dtype
-        self.dynamic_range      = dynamic_range
-        self.label_size         = label_size
-        self.label_dtype        = label_dtype
-        self._tf_minibatch_var  = None
-        self._tf_lod_var        = None
-        self._tf_minibatch_np   = None
-        self._tf_labels_np      = None
-
-        assert self.resolution == 2 ** self.resolution_log2
-        with tf.name_scope('Dataset'):
-            self._tf_minibatch_var = tf.Variable(np.int32(0), name='minibatch_var')
-            self._tf_lod_var = tf.Variable(np.int32(0), name='lod_var')
-
-    def configure(self, minibatch_size, lod=0):
-        lod = int(np.floor(lod))
-        assert minibatch_size >= 1 and 0 <= lod <= self.resolution_log2
-        tflib.set_vars({self._tf_minibatch_var: minibatch_size, self._tf_lod_var: lod})
-
-    def get_minibatch_tf(self): # => images, labels
-        with tf.name_scope('SyntheticDataset'):
-            shrink = tf.cast(2.0 ** tf.cast(self._tf_lod_var, tf.float32), tf.int32)
-            shape = [self.shape[0], self.shape[1] // shrink, self.shape[2] // shrink]
-            images = self._generate_images(self._tf_minibatch_var, self._tf_lod_var, shape)
-            labels = self._generate_labels(self._tf_minibatch_var)
-            return images, labels
-
-    def get_minibatch_np(self, minibatch_size, lod=0): # => images, labels
-        self.configure(minibatch_size, lod)
-        if self._tf_minibatch_np is None:
-            self._tf_minibatch_np = self.get_minibatch_tf()
-        return tflib.run(self._tf_minibatch_np)
-
-    def get_random_labels_tf(self, minibatch_size): # => labels
-        with tf.name_scope('SyntheticDataset'):
-            return self._generate_labels(minibatch_size)
-
-    def get_random_labels_np(self, minibatch_size): # => labels
-        self.configure(minibatch_size)
-        if self._tf_labels_np is None:
-            self._tf_labels_np = self.get_random_labels_tf(minibatch_size)
-        return tflib.run(self._tf_labels_np)
-
-    def _generate_images(self, minibatch, lod, shape): # to be overridden by subclasses # pylint: disable=unused-argument
-        return tf.zeros([minibatch] + shape, self.dtype)
-
-    def _generate_labels(self, minibatch): # to be overridden by subclasses
-        return tf.zeros([minibatch, self.label_size], self.label_dtype)
+#class SyntheticDataset:
+#    def __init__(self, resolution=1024, num_channels=3, dtype='uint8', dynamic_range=[0,255], label_size=0, label_dtype='float32'):
+#        self.resolution         = resolution
+#        self.resolution_log2    = int(np.log2(resolution))
+#        self.shape              = [num_channels, resolution, resolution]
+#        self.dtype              = dtype
+#        self.dynamic_range      = dynamic_range
+#        self.label_size         = label_size
+#        self.label_dtype        = label_dtype
+#        self._tf_minibatch_var  = None
+#        self._tf_lod_var        = None
+#        self._tf_minibatch_np   = None
+#        self._tf_labels_np      = None
+#
+#        assert self.resolution == 2 ** self.resolution_log2
+#        with tf.name_scope('Dataset'):
+#            self._tf_minibatch_var = tf.Variable(np.int32(0), name='minibatch_var')
+#            self._tf_lod_var = tf.Variable(np.int32(0), name='lod_var')
+#
+#    def configure(self, minibatch_size, lod=0):
+#        lod = int(np.floor(lod))
+#        assert minibatch_size >= 1 and 0 <= lod <= self.resolution_log2
+#        tflib.set_vars({self._tf_minibatch_var: minibatch_size, self._tf_lod_var: lod})
+#
+#    def get_minibatch_tf(self): # => images, labels
+#        with tf.name_scope('SyntheticDataset'):
+#            shrink = tf.cast(2.0 ** tf.cast(self._tf_lod_var, tf.float32), tf.int32)
+#            shape = [self.shape[0], self.shape[1] // shrink, self.shape[2] // shrink]
+#            images = self._generate_images(self._tf_minibatch_var, self._tf_lod_var, shape)
+#            labels = self._generate_labels(self._tf_minibatch_var)
+#            return images, labels
+#
+#    def get_minibatch_np(self, minibatch_size, lod=0): # => images, labels
+#        self.configure(minibatch_size, lod)
+#        if self._tf_minibatch_np is None:
+#            self._tf_minibatch_np = self.get_minibatch_tf()
+#        return tflib.run(self._tf_minibatch_np)
+#
+#    def get_random_labels_tf(self, minibatch_size): # => labels
+#        with tf.name_scope('SyntheticDataset'):
+#            return self._generate_labels(minibatch_size)
+#
+#    def get_random_labels_np(self, minibatch_size): # => labels
+#        self.configure(minibatch_size)
+#        if self._tf_labels_np is None:
+#            self._tf_labels_np = self.get_random_labels_tf(minibatch_size)
+#        return tflib.run(self._tf_labels_np)
+#
+#    def _generate_images(self, minibatch, lod, shape): # to be overridden by subclasses # pylint: disable=unused-argument
+#        return tf.zeros([minibatch] + shape, self.dtype)
+#
+#    def _generate_labels(self, minibatch): # to be overridden by subclasses
+#        return tf.zeros([minibatch, self.label_size], self.label_dtype)
 
 #----------------------------------------------------------------------------
 # Helper func for constructing a dataset object using the given options.
