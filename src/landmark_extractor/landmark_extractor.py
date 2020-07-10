@@ -89,14 +89,20 @@ class FaceLandmarkExtractor:
                     os.makedirs(out_dir)
                     
                 csv_dir = os.path.join(keypoint_csv_dir, os.path.relpath(subdir, source_root))
+                csv_filename = os.path.join(csv_dir, file)
+                base = os.path.splitext(csv_filename)[0]
+                csv_filename = base + ".csv"
                 if not os.path.isdir(csv_dir):
                     os.makedirs(csv_dir)                    
-                self.generate_landmark_image(os.path.join(subdir, file), os.path.join(out_dir, file), os.path.join(csv_dir, file), resolution)
+                self.generate_landmark_image(os.path.join(subdir, file), os.path.join(out_dir, file), csv_filename, resolution)
     
     def create_keypoints_only(self, source_root='', keypoint_csv_dir='', resolution=128):
         for subdir, dirs, files in os.walk(source_root):
             for file in files:
                 csv_dir = os.path.join(keypoint_csv_dir, os.path.relpath(subdir, source_root))
+                csv_filename = os.path.join(csv_dir, file)
+                base = os.path.splitext(csv_filename)[0]
+                csv_filename = base + ".csv"
                 if not os.path.isdir(csv_dir):
                     os.makedirs(csv_dir)   
-                self.generate_landmark_image(os.path.join(subdir, file), '', os.path.join(csv_dir, file), resolution)
+                self.generate_landmark_image(os.path.join(subdir, file), '', csv_filename, resolution)

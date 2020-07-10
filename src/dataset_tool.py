@@ -750,7 +750,8 @@ def create_dataset_subset_with_keypoints(tfrecord_dir, image1_filenames, image2_
                 img2 = np.asarray(PIL.Image.open(image2_filenames[idx]).convert('RGB'))
                 
                 csv_dir = os.path.join(keypoint_csv_dir, os.path.relpath(image1_filenames[idx], image1_root_dir))
-
+                base = os.path.splitext(csv_dir)[0]
+                csv_dir = base + ".csv"
                 with open(csv_dir, newline='') as csvfile:
                     reader = csv.DictReader(csvfile)
                     for row in reader:
