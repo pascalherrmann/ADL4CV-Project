@@ -7,8 +7,9 @@ from matplotlib import pyplot as plt
 import numpy as np
 import torch
 import os
+import csv
 
-from landmark_exctractor.face_alignment import FaceAlignment, LandmarksType
+from landmark_extractor.face_alignment import FaceAlignment, LandmarksType
 
 class FaceLandmarkExtractor:
     def __init__(self):
@@ -21,7 +22,7 @@ class FaceLandmarkExtractor:
             print('Error: couldnt extract landmarks')
             return None
     
-    def generate_landmark_image(self, source_path_or_image, output_image_path='', resolution=128):
+    def generate_landmark_image(self, source_path_or_image, output_image_path='', filename='', keypoint_csv_dir='', resolution=128):
         try:
             preds = self.extract_landmarks(source_path_or_image)
             input_shape = np.zeros((resolution,resolution))
@@ -59,6 +60,14 @@ class FaceLandmarkExtractor:
             
             if output_image_path != '':
                 fig.savefig(output_image_path)
+                
+            if keypoint_csv_dir != '':
+                with open(keypoint_csv_dir, 'w', newline='') as csvfile:
+                    fieldnames = [filename]
+                    writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+                
+                    writer.writeheader()
+                    writer.writerow({filename: preds})
     
             data = np.frombuffer(fig.canvas.tostring_rgb(), dtype=np.uint8)
             data = data.reshape(fig.canvas.get_width_height()[::-1] + (3,))
@@ -71,10 +80,16 @@ class FaceLandmarkExtractor:
         data = torch.from_numpy(np.array(data)).type(dtype = torch.float)
         return data, preds
     
-    def create_landmark_dataset(self, source_root='', output_root='', resolution=128):
+    
+    def create_landmark_dataset(self, source_root='', output_root='', keypoint_csv_dir='', resolution=128):
         for subdir, dirs, files in os.walk(source_root):
             for file in files:
                 out_dir = os.path.join(output_root, os.path.relpath(subdir, source_root))
                 if not os.path.isdir(out_dir):
                     os.makedirs(out_dir)
-                self.generate_landmark_image(os.path.join(subdir, file), os.path.join(out_dir, file), resolution)
+                self.generate_landmark_image(os.path.join(subdir, file), os.path.join(out_dir, file), os.path.join(subdir, file), keypoint_csv_dir, resolution)
+    
+    def create_keypoints_only(self, source_root='', keypoint_csv_dir='', resolution=128):
+        for subdir, dirs, files in os.walk(source_root):
+            for file in files:
+                self.generate_landmark_image(os.path.join(subdir, file), '', os.path.join(subdir, file), keypoint_csv_dir, resolution)
