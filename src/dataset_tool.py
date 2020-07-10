@@ -592,7 +592,7 @@ def create_from_images(tfrecord_dir, image_dir, shuffle):
 
 #----------------------------------------------------------------------------
             
-def create_from_image_pair(tfrecord_dir, image1_dir, image2_dir, keypoint_csv_dir='', shuffle):
+def create_from_image_pair(tfrecord_dir, image1_dir, image2_dir, keypoint_csv_dir, shuffle):
     print('Loading images from "%s"' % image1_dir) #TODO Add second dir to message
     import pathlib
     image1_filenames = sorted(pathlib.Path(image1_dir).rglob("*.png"))
@@ -752,11 +752,9 @@ def create_dataset_subset_with_keypoints(tfrecord_dir, image1_filenames, image2_
                 csv_dir = os.path.join(keypoint_csv_dir, os.path.relpath(image1_filenames[idx], image1_root_dir))
                 base = os.path.splitext(csv_dir)[0]
                 csv_dir = base + ".csv"
-                with open(csv_dir, newline='') as csvfile:
-                    reader = csv.DictReader(csvfile)
-                    for row in reader:
-                        keypoints = row['keypoints']
-                
+
+                keypoints = np.loadtxt(csv_dir, delimiter=',')
+
                 if channels == 1:
                     img1 = img1[np.newaxis, :, :] # HW => CHW
                     img2 = img2[np.newaxis, :, :] # HW => CHW

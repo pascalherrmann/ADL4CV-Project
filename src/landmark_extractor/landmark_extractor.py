@@ -62,13 +62,8 @@ class FaceLandmarkExtractor:
                 fig.savefig(output_image_path)
                 
             if keypoint_csv_dir != '':
-                with open(keypoint_csv_dir, 'w', newline='') as csvfile:
-                    fieldnames = ['keypoints']
-                    writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
-                
-                    writer.writeheader()
-                    writer.writerow({'keypoints': preds})
-    
+                np.savetxt(keypoint_csv_dir, preds, delimiter=',')
+
             data = np.frombuffer(fig.canvas.tostring_rgb(), dtype=np.uint8)
             data = data.reshape(fig.canvas.get_width_height()[::-1] + (3,))
             
