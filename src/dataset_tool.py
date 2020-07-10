@@ -636,6 +636,7 @@ def create_from_image_pair(tfrecord_dir, image1_dir, image2_dir, keypoint_csv_di
                 tfrecord_dir,
                 img1_subset_list[thread_index],
                 img2_subset_list[thread_index],
+                image1_dir,
                 keypoint_csv_dir,
                 channels,
                 thread_index
@@ -741,19 +742,19 @@ def create_dataset_subset(tfrecord_dir, image1_filenames, image2_filenames, chan
                 print(f'There was an error with adding an image pair. Skipping index {idx}')
                 continue
 
-def create_dataset_subset_with_keypoints(tfrecord_dir, image1_filenames, image2_filenames, keypoint_csv_dir, channels, thread):
-    with open(keypoint_csv_dir, mode='r') as infile:
-        reader = csv.reader(infile)
-        keypoint_dict = dict((rows[0],rows[1]) for rows in reader)
-        
+def create_dataset_subset_with_keypoints(tfrecord_dir, image1_filenames, image2_filenames, image1_root_dir, keypoint_csv_dir, channels, thread): 
     with TFRecordExporter(tfrecord_dir, len(image1_filenames), tfr_prefix=os.path.join(tfrecord_dir, os.path.basename(tfrecord_dir) + f'{thread}')) as tfr:
         for idx in range(len(image1_filenames)):
             try:
                 img1 = np.asarray(PIL.Image.open(image1_filenames[idx]).convert('RGB'))
                 img2 = np.asarray(PIL.Image.open(image2_filenames[idx]).convert('RGB'))
-                    
-                #TODO Load Keypoints from CSV
-                keypoints = keypoint_dict[image1_filenames[idx]]
+                
+                csv_dir = os.path.join(keypoint_csv_dir, os.path.relpath(image1_filenames[idx], image1_root_dir))
+
+                with open(csv_dir, newline='') as csvfile:
+                    reader = csv.DictReader(csvfile)
+                    for row in reader:
+                        keypoints = row['keypoints']
                 
                 if channels == 1:
                     img1 = img1[np.newaxis, :, :] # HW => CHW
