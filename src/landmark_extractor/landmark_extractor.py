@@ -77,8 +77,19 @@ class FaceLandmarkExtractor:
     
     
     def create_landmark_dataset(self, source_root='', output_root='', keypoint_csv_dir='', resolution=128):
+
+
+        total_files = []
+        for subdir, dirs, files in os.walk(output_root):
+          total_files.extend(files)
+        
+        print("{} existing files".format(len(total_files)))
+
+
         for subdir, dirs, files in os.walk(source_root):
+            print("Working on ", subdir)
             for file in files:
+                if file in total_files: continue
                 out_dir = os.path.join(output_root, os.path.relpath(subdir, source_root))
                 if not os.path.isdir(out_dir):
                     os.makedirs(out_dir)
