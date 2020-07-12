@@ -202,7 +202,7 @@ def training_loop(
             print('Start: ', start)
         else:
             print('Constructing networks...')
-            G, _, Gs = misc.load_pkl(decoder_pkl.decoder_pkl) # don't use pre-trained discriminator!
+            _, G, _, Gs = misc.load_pkl(decoder_pkl.decoder_pkl) # don't use pre-trained discriminator!
             num_layers = Gs.components.synthesis.input_shape[1]
 
             # here we add a new discriminator!

@@ -30,7 +30,7 @@ INVERSION_PICKLE_DIR = "/content/drive/My Drive/Public/styleganinv_face_256.pkl"
 
 ENCODER_PICKLE_DIR = None
 # Encoder
-GDRIVE_PATH = "/content/gdrive/My Drive/Public/tensorboards_shared"
+GDRIVE_PATH = "/content/drive/My Drive/Public/tensorboards_shared"
 
 # only for decoder
 TIME = 0

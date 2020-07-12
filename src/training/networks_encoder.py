@@ -148,7 +148,7 @@ def Encoder(embedded_w, input_landmarks, size=128, filter=64, filter_max=512, nu
             lm_context = dense(net, fmaps=160, gain=1, use_wscale=False)
             lm_context = leaky_relu(bn(lm_context, phase=phase, name='bn_landmark_encoder'))
             lm_context = tf.reshape(lm_context, [batch_size, 1, 160])
-            lm_context = tf.tile(lm_context, [1,12,1])
+            lm_context = tf.tile(lm_context, [1,num_layers,1])
         
         with tf.variable_scope('latent_code_encoder'):
             w_context = channel_independent_dense(embedded_w, 32, num_layers)
