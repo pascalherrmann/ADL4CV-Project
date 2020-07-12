@@ -68,8 +68,9 @@ class FaceLandmarkExtractor:
             data = data.reshape(fig.canvas.get_width_height()[::-1] + (3,))
             
             plt.close(fig)
-        except:
+        except Exception as e:
             print('Error: Image corrupted or no landmarks visible')
+            print(e)
             return None
         
         data = torch.from_numpy(np.array(data)).type(dtype = torch.float)
@@ -78,12 +79,14 @@ class FaceLandmarkExtractor:
     
     def create_landmark_dataset(self, source_root='', output_root='', keypoint_csv_dir='', resolution=128):
 
-
-        total_files = []
+        total_files = {}
+        print("Starting Landmark Dataset Creation")
         for subdir, dirs, files in os.walk(output_root):
-          total_files.extend(files)
+          for f in files:
+            total_files[f] = True
+          print("checking ", subdir)
         
-        print("{} existing files".format(len(total_files)))
+        print("{} existing files".format(len(total_files.keys())))
 
 
         for subdir, dirs, files in os.walk(source_root):
