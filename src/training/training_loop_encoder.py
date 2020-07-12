@@ -207,7 +207,7 @@ def training_loop(
 
             # here we add a new discriminator!
             D = tflib.Network('D',  # name of the network how we call it
-                              num_channels=3, resolution=128, label_size=0,  #some needed for this build function
+                              num_channels=3, resolution=config.RESOLUTION, label_size=0,  #some needed for this build function
                               func_name="training.networks_stylegan.D_basic") # function of that network. more was not passed in d_args!
                               # input is not passed here (just construction - note that we do not call the actual function!). Instead, network will inspect build function and require it for the get_output_for function.
             print("Created new Discriminator!")

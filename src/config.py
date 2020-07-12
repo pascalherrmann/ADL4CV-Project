@@ -20,13 +20,13 @@ run_dir_ignore = ['results', 'datasets', 'cache']
 # =======================
 # Begin of Configuration
 # =======================
-RESOLUTION = 128
+RESOLUTION = 256
 DESC = ""
 
-DATA_DIR = "/content/gdrive/My Drive/Public/tensorboards_shared/split_dataset/train"
-TEST_DATA_DIR = "/content/gdrive/My Drive/Public/tensorboards_shared/split_dataset/test/dataset_tfrecords0-r07.tfrecords"
-PICKLE_DIR = "/content/gdrive/My Drive/Public/tensorboards_shared/Training_Decoder_TF/00000-sgan-ffhq128-1gpu/network-snapshot-011489.pkl"
-INVERSION_PICKLE_DIR = "/content/gdrive/My Drive/Public/tensorboards_shared/Training_Encoder_X/128_Standard/snapshots/network-snapshot-02340288.pkl"
+DATA_DIR = "/content/drive/My Drive/Public/tensorboards_shared/split_dataset_256/train"
+TEST_DATA_DIR = "/content/drive/My Drive/Public/tensorboards_shared/split_dataset_256/test/0-r08.tfrecords"
+PICKLE_DIR = "/content/drive/My Drive/Public/styleganinv_face_256.pkl"
+INVERSION_PICKLE_DIR = "/content/drive/My Drive/Public/styleganinv_face_256.pkl"
 
 ENCODER_PICKLE_DIR = None
 # Encoder
