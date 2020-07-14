@@ -26,7 +26,7 @@ class FID(metric_base.MetricBase):
 
     def _evaluate(self, Gs, num_gpus):
         minibatch_size = num_gpus * self.minibatch_per_gpu
-        inception = misc.load_pkl('https://drive.google.com/uc?id=1MzTY44rLToO5APn8TZmfR7_ENSe5aZUn') # inception_v3_features.pkl
+        inception = misc.load_pkl('/content/gdrive/My Drive/Public/tensorboards_shared/inception_v3_features.pkl') # inception_v3_features.pkl
         activations = np.empty([self.num_images, inception.output_shape[1]], dtype=np.float32)
 
         # Calculate statistics for reals.
@@ -35,7 +35,13 @@ class FID(metric_base.MetricBase):
         if os.path.isfile(cache_file):
             mu_real, sigma_real = misc.load_pkl(cache_file)
         else:
-            for idx, images in enumerate(self._iterate_reals(minibatch_size=minibatch_size)):
+            progress = 0
+            for idx, batch_stacks in enumerate(self._iterate_reals(minibatch_size=minibatch_size)):
+                progress += batch_stacks.shape[0]
+                print(progress)
+                images = batch_stacks[:,0,:,:,:]
+                landmarks = batch_stacks[:,1,:,:,:]
+                print(images.shape)
                 begin = idx * minibatch_size
                 end = min(begin + minibatch_size, self.num_images)
                 activations[begin:end] = inception.run(images[:end-begin], num_gpus=num_gpus, assume_frozen=True)
@@ -44,9 +50,11 @@ class FID(metric_base.MetricBase):
             mu_real = np.mean(activations, axis=0)
             sigma_real = np.cov(activations, rowvar=False)
             misc.save_pkl((mu_real, sigma_real), cache_file)
-
+        
+        
         # Construct TensorFlow graph.
         result_expr = []
+        print("Construct TensorFlow graph.")
         for gpu_idx in range(num_gpus):
             with tf.device('/gpu:%d' % gpu_idx):
                 Gs_clone = Gs.clone()
@@ -57,13 +65,30 @@ class FID(metric_base.MetricBase):
                 result_expr.append(inception_clone.get_output_for(images))
 
         # Calculate statistics for fakes.
+        print("Calculate statistics for fakes.")
         for begin in range(0, self.num_images, minibatch_size):
             end = min(begin + minibatch_size, self.num_images)
             activations[begin:end] = np.concatenate(tflib.run(result_expr), axis=0)[:end-begin]
         mu_fake = np.mean(activations, axis=0)
         sigma_fake = np.cov(activations, rowvar=False)
+        
+        
+        progress = 0
+        for idx, batch_stacks in enumerate(self._iterate_reals(minibatch_size=minibatch_size)):
+            progress += batch_stacks.shape[0]
+            print(progress)
+            images = batch_stacks[:,0,:,:,:]
+            landmarks = batch_stacks[:,1,:,:,:]
+            print(images.shape)
+            begin = idx * minibatch_size
+            end = min(begin + minibatch_size, self.num_images)
+            activations[begin:end] = inception.run(images[:end-begin], num_gpus=num_gpus, assume_frozen=True)
+            if end == self.num_images:
+                break
+        
 
         # Calculate FID.
+        print("Calculate FID.")
         m = np.square(mu_fake - mu_real).sum()
         s, _ = scipy.linalg.sqrtm(np.dot(sigma_fake, sigma_real), disp=False) # pylint: disable=no-member
         dist = m + np.trace(sigma_fake + sigma_real - 2*s)

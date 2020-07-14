@@ -20,15 +20,23 @@ import dnnlib.tflib as tflib
 def parse_tfrecord_tf(record):
     features = tf.parse_single_example(record, features={
         'shape': tf.FixedLenFeature([3], tf.int64),
-        'data': tf.FixedLenFeature([], tf.string)})
-    data = tf.decode_raw(features['data'], tf.uint8)
-    return tf.reshape(data, features['shape'])
+        'portrait': tf.FixedLenFeature([], tf.string),
+        'landmark': tf.FixedLenFeature([], tf.string)})
+    portrait = tf.decode_raw(features['portrait'], tf.uint8)
+    landmark = tf.decode_raw(features['landmark'], tf.uint8)
+    portrait = tf.reshape(portrait, (1, features['shape'][0], features['shape'][1], features['shape'][2]))
+    landmark = tf.reshape(landmark, (1, features['shape'][0], features['shape'][1], features['shape'][2]))
+    data = tf.concat((portrait, landmark), axis=0)
+    return data
+
 
 def parse_tfrecord_np(record):
     ex = tf.train.Example()
     ex.ParseFromString(record)
-    shape = ex.features.feature['shape'].int64_list.value # temporary pylint workaround # pylint: disable=no-member
-    data = ex.features.feature['data'].bytes_list.value[0] # temporary pylint workaround # pylint: disable=no-member
+    shape = ex.features.feature['shape'].int64_list.value 
+    data = ex.features.feature['portrait'].bytes_list.value[0]
+    data = ex.features.feature['portrait'].bytes_list.value[0] #todo
+ #   data = ex.features.feature['data'].bytes_list.value[0]
     return np.fromstring(data, np.uint8).reshape(shape)
 
 #----------------------------------------------------------------------------
@@ -92,14 +100,17 @@ class TFRecordDataset:
         self.resolution = resolution if resolution is not None else max_shape[1]
         self.resolution_log2 = int(np.log2(self.resolution))
         self.shape = [max_shape[0], self.resolution, self.resolution]
+        print("shape", self.shape)
+        print("res", self.resolution)
+        print("rses-log", self.resolution_log2)
         tfr_lods = [self.resolution_log2 - int(np.log2(shape[1])) for shape in tfr_shapes]
-        assert all(shape[0] == max_shape[0] for shape in tfr_shapes)
-        assert all(shape[1] == shape[2] for shape in tfr_shapes)
-        assert all(shape[1] == self.resolution // (2**lod) for shape, lod in zip(tfr_shapes, tfr_lods))
-        assert all(lod in tfr_lods for lod in range(self.resolution_log2 - 1))
+        #assert all(shape[0] == max_shape[0] for shape in tfr_shapes)
+        #assert all(shape[1] == shape[2] for shape in tfr_shapes)
+        #a#ssert all(shape[1] == self.resolution // (2**lod) for shape, lod in zip(tfr_shapes, tfr_lods))
+        #assert all(lod in tfr_lods for lod in range(self.resolution_log2 - 1))
 
         # Load labels.
-        assert max_label_size == 'full' or max_label_size >= 0
+        #assert max_label_size == 'full' or max_label_size >= 0
         self._np_labels = np.zeros([1<<20, 0], dtype=np.float32)
         if self.label_file is not None and max_label_size != 0:
             self._np_labels = np.load(self.label_file)
