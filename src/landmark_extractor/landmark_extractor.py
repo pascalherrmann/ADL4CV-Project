@@ -7,12 +7,13 @@ from matplotlib import pyplot as plt
 import numpy as np
 import torch
 import os
+import csv
 
-import face_alignment
+from landmark_extractor.face_alignment import FaceAlignment, LandmarksType
 
 class FaceLandmarkExtractor:
     def __init__(self):
-        self.face_aligner = face_alignment.FaceAlignment(face_alignment.LandmarksType._2D, flip_input=False, device = 'cuda:0' if torch.cuda.is_available() else 'cpu')
+        self.face_aligner = FaceAlignment(LandmarksType._2D, flip_input=False, device = 'cuda:0' if torch.cuda.is_available() else 'cpu')
     
     def extract_landmarks(self, source_path_or_image):
         try:
@@ -21,9 +22,9 @@ class FaceLandmarkExtractor:
             print('Error: couldnt extract landmarks')
             return None
     
-    def generate_landmark_image(self, source_path_or_image, output_image_path='', resolution=128):
+    def generate_landmark_image(self, source_path_or_image, output_image_path='', keypoint_csv_dir='', resolution=128):
         try:
-            preds, _ = self.extract_landmarks(source_image_path)
+            preds = self.extract_landmarks(source_path_or_image)
             input_shape = np.zeros((resolution,resolution))
             dpi = 100
             fig = plt.figure(figsize=(input_shape.shape[1]/dpi, input_shape.shape[0]/dpi), dpi = dpi)
@@ -59,22 +60,58 @@ class FaceLandmarkExtractor:
             
             if output_image_path != '':
                 fig.savefig(output_image_path)
-    
+                
+            if keypoint_csv_dir != '':
+                np.savetxt(keypoint_csv_dir, preds, delimiter=',')
+
             data = np.frombuffer(fig.canvas.tostring_rgb(), dtype=np.uint8)
             data = data.reshape(fig.canvas.get_width_height()[::-1] + (3,))
             
             plt.close(fig)
-        except:
+        except Exception as e:
             print('Error: Image corrupted or no landmarks visible')
+            print(e)
             return None
         
         data = torch.from_numpy(np.array(data)).type(dtype = torch.float)
-        return data
+        return data, preds
     
-    def create_landmark_dataset(self, source_root='', output_root='', resolution=128):
+    
+    def create_landmark_dataset(self, source_root='', output_root='', keypoint_csv_dir='', resolution=128):
+
+        total_files = {}
+        print("Starting Landmark Dataset Creation")
+        for subdir, dirs, files in os.walk(output_root):
+          for f in files:
+            total_files[f] = True
+          print("checking ", subdir)
+        
+        print("{} existing files".format(len(total_files.keys())))
+
+
         for subdir, dirs, files in os.walk(source_root):
+            print("Working on ", subdir)
             for file in files:
+                if file in total_files: continue
                 out_dir = os.path.join(output_root, os.path.relpath(subdir, source_root))
                 if not os.path.isdir(out_dir):
                     os.makedirs(out_dir)
-                self.generate_landmark_image(os.path.join(subdir, file), os.path.join(out_dir, file), resolution)
+                    
+                csv_dir = os.path.join(keypoint_csv_dir, os.path.relpath(subdir, source_root))
+                csv_filename = os.path.join(csv_dir, file)
+                base = os.path.splitext(csv_filename)[0]
+                csv_filename = base + ".csv"
+                if not os.path.isdir(csv_dir):
+                    os.makedirs(csv_dir)                    
+                self.generate_landmark_image(os.path.join(subdir, file), os.path.join(out_dir, file), csv_filename, resolution)
+    
+    def create_keypoints_only(self, source_root='', keypoint_csv_dir='', resolution=128):
+        for subdir, dirs, files in os.walk(source_root):
+            for file in files:
+                csv_dir = os.path.join(keypoint_csv_dir, os.path.relpath(subdir, source_root))
+                csv_filename = os.path.join(csv_dir, file)
+                base = os.path.splitext(csv_filename)[0]
+                csv_filename = base + ".csv"
+                if not os.path.isdir(csv_dir):
+                    os.makedirs(csv_dir)   
+                self.generate_landmark_image(os.path.join(subdir, file), '', csv_filename, resolution)
