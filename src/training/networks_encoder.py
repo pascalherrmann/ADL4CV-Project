@@ -117,7 +117,7 @@ def residual_block_bn(inputs, fin, fout, phase, scope): #resnet v1
     return net
 
 
-def Encoder(embedded_w, input_landmarks, size=128, filter=64, filter_max=512, num_layers=12, phase=True, **kwargs):
+def Encoder(embedded_w, input_landmarks, input_keypoints, size=128, filter=64, filter_max=512, num_layers=12, phase=True, **kwargs):
     #print('using bn encoder phase: ', phase)
     s0 = 4
     num_blocks = int(np.log2(size / s0))
@@ -133,21 +133,8 @@ def Encoder(embedded_w, input_landmarks, size=128, filter=64, filter_max=512, nu
     #input_concatenated = tf.concat((input_img, input_landmarks), axis=1) # [0: batch, 1: channels, 2,3: hw]
 
     with tf.variable_scope('encoder'):
-        with tf.variable_scope('landmark_image_stage'):
-            net = conv2d(input_landmarks, fmaps=filter, kernel=3, use_wscale=False)
-            net = leaky_relu(bn(net, phase=phase, name='bn_input_stage'))
-
-        for i in range(num_blocks):
-            name_scope = 'landmark_encoder_res_block_%d' % (i)
-            nf1 = min(filter * 2 ** i, filter_max)
-            nf2 = min(filter * 2 ** (i + 1), filter_max)
-            net = downscale2d(net, factor=2)
-            net = residual_block_bn(net, fin=nf1, fout=nf2, phase=phase, scope=name_scope)
-
         with tf.variable_scope('landmark_encoder_fc'):
-            lm_context = dense(net, fmaps=160, gain=1, use_wscale=False)
-            lm_context = leaky_relu(bn(lm_context, phase=phase, name='bn_landmark_encoder'))
-            lm_context = tf.reshape(lm_context, [batch_size, 1, 160])
+            lm_context = tf.reshape(input_keypoints, [batch_size, 1, 136])
             lm_context = tf.tile(lm_context, [1,12,1])
         
         with tf.variable_scope('latent_code_encoder'):
