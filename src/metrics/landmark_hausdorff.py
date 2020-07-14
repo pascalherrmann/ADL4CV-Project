@@ -11,7 +11,7 @@ import numpy as np
 from scipy.spatial.distance import directed_hausdorff
 import tensorflow as tf
 import dnnlib.tflib as tflib
-from ..landmark_extractor import FaceLandmarkExtractor
+from landmark_extractor.landmark_extractor import FaceLandmarkExtractor
 
 import config
 from metrics import metric_base
@@ -116,7 +116,7 @@ class LMHausdorff(metric_base.MetricBase):
             
             for i in range(minibatch_size):
                 ground_truth_lm = batch_landmarks[i]
-                generated_lm = self.landmark_extractor.generate_landmark_image(source_path_or_image=samples_manipulated[i], resolution=resolution)
+                generated_lm, _ = self.landmark_extractor.generate_landmark_image(source_path_or_image=samples_manipulated[i], resolution=resolution)
                 
                 hd_sum += self.calculate_landmark_hausdorff(ground_truth_lm, generated_lm)
             if end == self.num_images:
