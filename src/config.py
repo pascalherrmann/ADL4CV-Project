@@ -36,6 +36,9 @@ GDRIVE_PATH = "/content/gdrive/My Drive/Public/tensorboards_shared"
 TIME = 0
 KIMG = 0
 
+# metrics
+INCEPTION_PICKLE_DIR = "/content/gdrive/My Drive/Public/tensorboards_shared/inception_v3_features.pkl"
+
 # =======================
 # End of Configuration
 # =======================
