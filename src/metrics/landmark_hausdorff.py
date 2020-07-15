@@ -16,6 +16,11 @@ from landmark_extractor.landmark_extractor import FaceLandmarkExtractor
 import config
 from metrics import metric_base
 from training import dataset
+from training import misc
+
+from utils.visualizer import fuse_images
+from utils.visualizer import save_image
+from utils.visualizer import adjust_pixel_range
 
 #----------------------------------------------------------------------------
 
@@ -26,17 +31,21 @@ class LMHausdorff(metric_base.MetricBase):
         self.minibatch_per_gpu = minibatch_per_gpu
         self.landmark_extractor = FaceLandmarkExtractor()
         
-    def run_image_manipulation(E, Gs, Inv, portraits, landmarks, num_gpus):
+    def run_image_manipulation(self, E, Gs, Inv, portraits, landmarks, num_gpus):
         out_split = []
         num_layers, latent_dim = Gs.components.synthesis.input_shape[1:3]
+        
+        with tf.device("/cpu:0"):
+            in_split_portraits = tf.split(portraits, num_or_size_splits=num_gpus, axis=0)
+            in_split_landmarks = tf.split(landmarks, num_or_size_splits=num_gpus, axis=0)
+        
         for gpu in range(num_gpus):
             with tf.device("/gpu:%d" % gpu):
-                in_landmarks_gpu = landmarks[gpu]
-                in_portraits_gpu = portraits[gpu]
+                in_landmarks_gpu = in_split_landmarks[gpu]
+                in_portraits_gpu = in_split_portraits[gpu]
                 
                 embedded_w = Inv.get_output_for(in_portraits_gpu, phase=True)
                 embedded_w_tensor = tf.reshape(embedded_w, [portraits.shape[0], num_layers, latent_dim])
-                
                 latent_w = E.get_output_for(embedded_w_tensor, in_landmarks_gpu, phase=False)
                 latent_wp = tf.reshape(latent_w, [portraits.shape[0], num_layers, latent_dim])
                 fake_X_val = Gs.components.synthesis.get_output_for(latent_wp, randomize_noise=False)
@@ -59,7 +68,7 @@ class LMHausdorff(metric_base.MetricBase):
         
         for i in range(resolution):
             for j in range(resolution):
-                color_ij = landmark_image[i][j]
+                color_ij = np.rint(landmark_image[i][j])
                 #black -> background
                 if (color_ij[0] == 0) and (color_ij[1] == 0) and (color_ij[2] == 0):
                     continue
@@ -78,59 +87,73 @@ class LMHausdorff(metric_base.MetricBase):
                 #pink -> mouth
                 elif (color_ij[0] == 255) and (color_ij[1] == 192) and (color_ij[2] == 203):
                     mouth.append((i/resolution, j/resolution))
+
         return np.asarray([chin, eyebrows, nose, eyes, mouth])
     
-    def calculate_landmark_hausdorff(self, lm_batch1, lm_batch2):
-        hd_sum = 0.0
-        for i in range(lm_batch1.shape[0]):
-            #get landmark subsets
-            set1 = self.split_landmarks(lm_batch1[i])
-            set2 = self.split_landmarks(lm_batch2[i])
-    
-            # Calculate Hausdorff Distance.
-            hd_dist = 0.0
-            for i in range(5):
-              hd_dist += max(directed_hausdorff(set1[i], set2[i])[0], directed_hausdorff(set2[i], set1[i])[0])
-             
-            hd_sum += hd_dist
+    def calculate_landmark_hausdorff(self, lm_img1, lm_img2):
+        #get landmark subsets
+        set1 = self.split_landmarks(lm_img1)
+        set2 = self.split_landmarks(lm_img2)
+
+        # Calculate Hausdorff Distance.
+        hd_dist = 0.0
+        for i in range(5):
+          hd_dist += max(directed_hausdorff(set1[i], set2[i])[0], directed_hausdorff(set2[i], set1[i])[0])
             
-        return hd_sum
+        return hd_dist
     
     def _evaluate(self, E, Gs, Inv, num_gpus):
         minibatch_size = num_gpus * self.minibatch_per_gpu
         resolution = Gs.components.synthesis.output_shape[2]
         
         placeholder_portraits = tf.placeholder(tf.float32, [self.minibatch_per_gpu, 3, resolution, resolution], name='placeholder_portraits')
-        placeholder_landmarks = tf.placeholder(tf.float32, [self.minibatch_per_gput, 3, resolution, resolution], name='placeholder_landmarks')
+        placeholder_landmarks = tf.placeholder(tf.float32, [self.minibatch_per_gpu, 3, resolution, resolution], name='placeholder_landmarks')
         
         fake_X_val = self.run_image_manipulation(E, Gs, Inv, placeholder_portraits, placeholder_landmarks, num_gpus)
         
         hd_sum = 0.0
+        failed_counter = 0
         
         for idx, data in enumerate(self._iterate_reals(minibatch_size=minibatch_size)):
-            batch_portraits = data[0]
-            batch_landmarks = data[1]
+            batch_portraits = data[:,0,:,:,:]
+            batch_landmarks = np.roll(data[:,1,:,:,:], shift=1, axis=0)
+
+            batch_portraits = misc.adjust_dynamic_range(batch_portraits.astype(np.float32), [0, 255], [-1., 1.])
+            batch_landmarks = misc.adjust_dynamic_range(batch_landmarks.astype(np.float32), [0, 255], [-1., 1.])
+
             begin = idx * minibatch_size
             end = min(begin + minibatch_size, self.num_images)
             samples_manipulated = tflib.run(fake_X_val, feed_dict={placeholder_portraits: batch_portraits, placeholder_landmarks: batch_landmarks})
             
+            samples_manipulated = misc.adjust_dynamic_range(samples_manipulated.astype(np.float32), [-1., 1.], [0, 255])
+            samples_manipulated = np.transpose(samples_manipulated, [0, 2, 3, 1])
+
+            batch_landmarks = misc.adjust_dynamic_range(batch_landmarks.astype(np.float32), [-1., 1.], [0, 255])
+
             for i in range(minibatch_size):
-                ground_truth_lm = batch_landmarks[i]
-                generated_lm, _ = self.landmark_extractor.generate_landmark_image(source_path_or_image=samples_manipulated[i], resolution=resolution)
+                try:
+                  ground_truth_lm = batch_landmarks[i]
+                  generated_lm, _ = self.landmark_extractor.generate_landmark_image(source_path_or_image=samples_manipulated[i], resolution=resolution)
+                  generated_lm = generated_lm.cpu().detach().numpy()
+                  ground_truth_lm = np.transpose(ground_truth_lm, [1, 2, 0])
+                  hd_sum += self.calculate_landmark_hausdorff(ground_truth_lm, generated_lm)
                 
-                hd_sum += self.calculate_landmark_hausdorff(ground_truth_lm, generated_lm)
+                except Exception as e:
+                  print('Error: Landmark couldnt be extracted from generated output. Skipping the sample')
+                  failed_counter += 1
+                  continue
+                
             if end == self.num_images:
                 break
-        
         avg_hd_dist = hd_sum/self.num_images
         
-        self._report_result(np.real(avg_hd_dist))
+        self._report_result(np.real(avg_hd_dist), suffix='Average Landmark Hausdorff Distance')
+        self._report_result(failed_counter, suffix='Number of failed landmark extractions')
         
     #TODO include landmarks
     def _iterate_reals(self, minibatch_size):
         dataset_obj = dataset.load_dataset(data_dir=config.data_dir, **self._dataset_args)
         while True:
             images, _labels = dataset_obj.get_minibatch_np(minibatch_size)
-            
             yield images
 #----------------------------------------------------------------------------
