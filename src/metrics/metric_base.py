@@ -45,6 +45,7 @@ class MetricBase:
 
     def run(self, network_pkl, inversion_pkl, run_dir=None, dataset_args=None, mirror_augment=None, num_gpus=1, tf_config=None, log_results=True):
         self._network_pkl = network_pkl
+        self._inversion_pkl = inversion_pkl
         self._dataset_args = dataset_args
         self._mirror_augment = mirror_augment
         self._results = []
@@ -57,8 +58,8 @@ class MetricBase:
 
         time_begin = time.time()
         with tf.Graph().as_default(), tflib.create_session(tf_config).as_default(): # pylint: disable=not-context-manager
-            E, _G, _D, Gs = misc.load_pkl(self.generator_pkl)
-            Inv, _, _, _ = misc.load_pkl(self.inversion_pkl)
+            E, _G, _D, Gs = misc.load_pkl(self._network_pkl)
+            Inv, _, _, _ = misc.load_pkl(self._inversion_pkl)
             self._evaluate(E, Gs, Inv, num_gpus=num_gpus)
         self._eval_time = time.time() - time_begin
 

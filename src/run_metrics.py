@@ -17,13 +17,13 @@ from training import misc
 
 #----------------------------------------------------------------------------
 
-def run_pickle(submit_config, metric_args, network_pkl, dataset_args, mirror_augment):
+def run_pickle(submit_config, metric_args, network_pkl, inversion_pkl, dataset_args, mirror_augment):
     ctx = dnnlib.RunContext(submit_config)
     tflib.init_tf()
     print('Evaluating %s metric on network_pkl "%s"...' % (metric_args.name, network_pkl))
     metric = dnnlib.util.call_func_by_name(**metric_args)
     print()
-    metric.run(network_pkl, dataset_args=dataset_args, mirror_augment=mirror_augment, num_gpus=submit_config.num_gpus)
+    metric.run(network_pkl, inversion_pkl, dataset_args=dataset_args, mirror_augment=mirror_augment, num_gpus=submit_config.num_gpus)
     print()
     ctx.close()
 
