@@ -147,8 +147,8 @@ class LMHausdorff(metric_base.MetricBase):
                 break
         avg_hd_dist = hd_sum/self.num_images
         
-        self._report_result(np.real(avg_hd_dist), suffix='Average Landmark Hausdorff Distance')
-        self._report_result(failed_counter, suffix='Number of failed landmark extractions')
+        self._report_result(np.real(avg_hd_dist), suffix='/Average Landmark Hausdorff Distance')
+        self._report_result(failed_counter, suffix='/Number of failed landmark extractions')
         
     #TODO include landmarks
     def _iterate_reals(self, minibatch_size):

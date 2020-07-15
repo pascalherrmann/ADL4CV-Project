@@ -23,11 +23,12 @@ class FaceLandmarkExtractor:
             return None
     
     def generate_landmark_image(self, source_path_or_image, output_image_path='', keypoint_csv_dir='', resolution=128):
+        input_shape = np.zeros((resolution,resolution))
+        dpi = 100
+        fig = plt.figure(figsize=(input_shape.shape[1]/dpi, input_shape.shape[0]/dpi), dpi = dpi)
         try:
             preds = self.extract_landmarks(source_path_or_image)
-            input_shape = np.zeros((resolution,resolution))
-            dpi = 100
-            fig = plt.figure(figsize=(input_shape.shape[1]/dpi, input_shape.shape[0]/dpi), dpi = dpi)
+            
             ax = fig.add_subplot(1,1,1)
             
              # show the background image
@@ -71,6 +72,7 @@ class FaceLandmarkExtractor:
         except Exception as e:
             print('Error: Image corrupted or no landmarks visible')
             print(e)
+            plt.close(fig)
             return None
         
         data = torch.from_numpy(np.array(data)).type(dtype = torch.float)
