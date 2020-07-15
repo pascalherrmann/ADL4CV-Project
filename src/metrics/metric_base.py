@@ -58,7 +58,10 @@ class MetricBase:
         time_begin = time.time()
         with tf.Graph().as_default(), tflib.create_session(tf_config).as_default(): # pylint: disable=not-context-manager
             E, _G, _D, Gs = misc.load_pkl(self._network_pkl)
-            self._evaluate(Gs, num_gpus=num_gpus)
+            print("Loaded Encoder")
+            Inv, _, _, _  = misc.load_pkl(config.INVERSION_PICKLE_DIR)
+            print("Loaded Inv")
+            self._evaluate(Gs, E, Inv, num_gpus=num_gpus)
         self._eval_time = time.time() - time_begin
 
         if log_results:
@@ -85,7 +88,7 @@ class MetricBase:
         for res in self._results:
             tflib.autosummary.autosummary('Metrics/' + self.name + res.suffix, res.value)
 
-    def _evaluate(self, Gs, num_gpus):
+    def _evaluate(self, Gs, E, Inv, num_gpus):
         raise NotImplementedError # to be overridden by subclasses
 
     def _report_result(self, value, suffix='', fmt='%-10.4f'):
@@ -136,7 +139,7 @@ class MetricGroup:
 # Dummy metric for debugging purposes.
 
 class DummyMetric(MetricBase):
-    def _evaluate(self, Gs, num_gpus):
+    def _evaluate(self, Gs, E, Inv, num_gpus):
         _ = Gs, num_gpus
         self._report_result(0.0)
 
