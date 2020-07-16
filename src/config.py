@@ -38,7 +38,7 @@ KIMG = 0
 
 # metrics
 INCEPTION_PICKLE_DIR = "/content/gdrive/My Drive/Public/tensorboards_shared/inception_v3_features.pkl"
-FACENET_PB_DIR = "/content/gdrive/My Drive/Public/tensorboards_shared/facenet.pb"
+FACENET_PB_DIR = "/content/gdrive/My Drive/Public/tensorboards_shared/facenet_model/facenet.pb"
 
 # =======================
 # End of Configuration

@@ -16,7 +16,8 @@ from metrics import metric_base
 from training import dataset
 from training import misc
 
-from sklearn.metrics.pairwise import cosine_similarity
+import scipy
+from tensorflow.python.platform import gfile
 
 #----------------------------------------------------------------------------
 
@@ -25,9 +26,26 @@ class CSIM(metric_base.MetricBase):
         super().__init__(**kwargs)
         self.num_images = num_images
         self.minibatch_per_gpu = minibatch_per_gpu
-        self.facenet = tf.saved_model.load(config.FACENET_DB_DIR) # facenet.db
-        self.facenet.print_layers()
+
+        with gfile.FastGFile(config.FACENET_PB_DIR,'rb') as f:
+            graph_def = tf.GraphDef()
+            graph_def.ParseFromString(f.read())
+            tf.import_graph_def(graph_def, input_map=None, name='')
+        self.facenet_graph = tf.get_default_graph()
+
+    def get_facenet_embeddings(self, images):
+        # Get input and output tensors
+        images_placeholder = self.facenet_graph.get_tensor_by_name("input:0")
+        embeddings = self.facenet_graph.get_tensor_by_name("embeddings:0")
+        phase_train_placeholder =self.facenet_graph.get_tensor_by_name("phase_train:0")
         
+        # Run forward pass to calculate embeddings
+        feed_dict = { images_placeholder:images, phase_train_placeholder:False }
+        with tf.Session(graph=self.facenet_graph) as sess:
+            emb_array = sess.run(embeddings, feed_dict=feed_dict)
+      
+        return emb_array
+
     def run_image_manipulation(self, E, Gs, Inv, portraits, landmarks, num_gpus):
         out_split = []
         num_layers, latent_dim = Gs.components.synthesis.input_shape[1:3]
@@ -74,14 +92,19 @@ class CSIM(metric_base.MetricBase):
             begin = idx * minibatch_size
             end = min(begin + minibatch_size, self.num_images)
             samples_manipulated = tflib.run(fake_X_val, feed_dict={placeholder_portraits: batch_portraits, placeholder_landmarks: batch_landmarks})
+            
+            samples_manipulated = np.transpose(samples_manipulated, [0, 2, 3, 1])
+            samples_manipulated = np.pad(samples_manipulated, ((0, 0), (11, 11), (11, 11), (0, 0)), mode='constant')
 
-            embeddings_real = self.facenet.run(batch_portraits, num_gpus=num_gpus, assume_frozen=True)
-            embeddings_fake = self.facenet.run(samples_manipulated, num_gpus=num_gpus, assume_frozen=True)
+            batch_portraits = np.transpose(batch_portraits, [0, 2, 3, 1])
+            batch_portraits = np.pad(batch_portraits, ((0, 0), (11, 11), (11, 11), (0, 0)), mode='constant')
+
+            embeddings_real = self.get_facenet_embeddings(batch_portraits)
+            embeddings_fake = self.get_facenet_embeddings(samples_manipulated)
             
             for i in range(minibatch_size):
-                #TODO calculate csim
-                csim_sum += cosine_similarity([embeddings_real[i], embeddings_fake[i]])
-                
+                csim_sum += 1 - scipy.spatial.distance.cosine(embeddings_real[i], embeddings_fake[i])
+            
             if end == self.num_images:
                 break
         avg_csim = csim_sum/self.num_images
