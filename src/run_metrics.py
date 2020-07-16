@@ -70,12 +70,13 @@ def main():
     #metrics += [metric_base.ppl_zend]
     #metrics += [metric_base.ppl_wend]
     #metrics += [metric_base.ls]
-    metrics += [metric_base.lm_hd]
+    #metrics += [metric_base.lm_hd]
+    metrics += [metric_base.csim]
     #metrics += [metric_base.dummy]
 
     # Which networks to evaluate them on?
     tasks = []
-    tasks += [EasyDict(run_func_name='run_metrics.run_pickle', network_pkl='/content/gdrive/My Drive/Public/tensorboards_shared/run/t/58_rignet_fixed_pose_only_larger_adv_scaling/snapshots/network-snapshot-01560192.pkl', inversion_pkl='/content/gdrive/My Drive/Public/tensorboards_shared/Training_Encoder_X/128_Standard/snapshots/network-snapshot-02340288.pkl', dataset_args=EasyDict(tfrecord_dir='/content/gdrive/My Drive/Public/tensorboards_shared/split_dataset/train', shuffle_mb=0), mirror_augment=True)] # karras2019stylegan-ffhq-1024x1024.pkl
+    tasks += [EasyDict(run_func_name='run_metrics.run_pickle', network_pkl='/content/gdrive/My Drive/Public/tensorboards_shared/run/t/58_rignet_fixed_pose_only_larger_adv_scaling/snapshots/network-snapshot-01560192.pkl', inversion_pkl='/content/gdrive/My Drive/Public/tensorboards_shared/Training_Encoder_X/128_Standard/snapshots/network-snapshot-02340288.pkl', dataset_args=EasyDict(tfrecord_dir='/content/gdrive/My Drive/Public/tensorboards_shared/split_dataset/test', shuffle_mb=0), mirror_augment=True)] # karras2019stylegan-ffhq-1024x1024.pkl
     #tasks += [EasyDict(run_func_name='run_metrics.run_snapshot', run_id=100, snapshot=25000)]
     #tasks += [EasyDict(run_func_name='run_metrics.run_all_snapshots', run_id=100)]
 

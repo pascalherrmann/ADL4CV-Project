@@ -5,27 +5,28 @@
 # http://creativecommons.org/licenses/by-nc/4.0/ or send a letter to
 # Creative Commons, PO Box 1866, Mountain View, CA 94042, USA.
 
-"""Landmark Hausdorff (LMHausdorff)."""
+"""Appearance Cosine Similarity (CSIM)."""
 
 import numpy as np
-from scipy.spatial.distance import directed_hausdorff
 import tensorflow as tf
 import dnnlib.tflib as tflib
-from landmark_extractor.landmark_extractor import FaceLandmarkExtractor
 
 import config
 from metrics import metric_base
 from training import dataset
 from training import misc
 
+from sklearn.metrics.pairwise import cosine_similarity
+
 #----------------------------------------------------------------------------
 
-class LMHausdorff(metric_base.MetricBase):
+class CSIM(metric_base.MetricBase):
     def __init__(self, num_images, minibatch_per_gpu, **kwargs):
         super().__init__(**kwargs)
         self.num_images = num_images
         self.minibatch_per_gpu = minibatch_per_gpu
-        self.landmark_extractor = FaceLandmarkExtractor()
+        self.facenet = tf.saved_model.load(config.FACENET_DB_DIR) # facenet.db
+        self.facenet.print_layers()
         
     def run_image_manipulation(self, E, Gs, Inv, portraits, landmarks, num_gpus):
         out_split = []
@@ -52,52 +53,6 @@ class LMHausdorff(metric_base.MetricBase):
 
         return out_expr
     
-    #extract subsets for each landmark type from the landmark image
-    def split_landmarks(self, landmark_image=None):
-        resolution = landmark_image.shape[0]
-
-        chin = []
-        eyebrows = []
-        nose = []
-        eyes = []
-        mouth = []
-        
-        for i in range(resolution):
-            for j in range(resolution):
-                color_ij = np.rint(landmark_image[i][j])
-                #black -> background
-                if (color_ij[0] == 0) and (color_ij[1] == 0) and (color_ij[2] == 0):
-                    continue
-                #green -> chin
-                elif (color_ij[0] == 0) and (color_ij[1] == 128) and (color_ij[2] == 0):
-                    chin.append((i/resolution, j/resolution))
-                #orange -> eyebrows
-                elif (color_ij[0] == 255) and (color_ij[1] == 165) and (color_ij[2] == 0):
-                    eyebrows.append((i/resolution, j/resolution))
-                #blue -> nose
-                elif (color_ij[0] == 0) and (color_ij[1] == 0) and (color_ij[2] == 255):
-                    nose.append((i/resolution, j/resolution))
-                #red -> eyes
-                elif (color_ij[0] == 255) and (color_ij[1] == 0) and (color_ij[2] == 0):
-                    eyes.append((i/resolution, j/resolution))
-                #pink -> mouth
-                elif (color_ij[0] == 255) and (color_ij[1] == 192) and (color_ij[2] == 203):
-                    mouth.append((i/resolution, j/resolution))
-
-        return np.asarray([chin, eyebrows, nose, eyes, mouth])
-    
-    def calculate_landmark_hausdorff(self, lm_img1, lm_img2):
-        #get landmark subsets
-        set1 = self.split_landmarks(lm_img1)
-        set2 = self.split_landmarks(lm_img2)
-
-        # Calculate Hausdorff Distance.
-        hd_dist = 0.0
-        for i in range(5):
-          hd_dist += max(directed_hausdorff(set1[i], set2[i])[0], directed_hausdorff(set2[i], set1[i])[0])
-            
-        return hd_dist
-    
     def _evaluate(self, E, Gs, Inv, num_gpus):
         minibatch_size = num_gpus * self.minibatch_per_gpu
         resolution = Gs.components.synthesis.output_shape[2]
@@ -107,8 +62,7 @@ class LMHausdorff(metric_base.MetricBase):
         
         fake_X_val = self.run_image_manipulation(E, Gs, Inv, placeholder_portraits, placeholder_landmarks, num_gpus)
         
-        hd_sum = 0.0
-        failed_counter = 0
+        csim_sum = 0.0
         
         for idx, data in enumerate(self._iterate_reals(minibatch_size=minibatch_size)):
             batch_portraits = data[:,0,:,:,:]
@@ -120,31 +74,19 @@ class LMHausdorff(metric_base.MetricBase):
             begin = idx * minibatch_size
             end = min(begin + minibatch_size, self.num_images)
             samples_manipulated = tflib.run(fake_X_val, feed_dict={placeholder_portraits: batch_portraits, placeholder_landmarks: batch_landmarks})
+
+            embeddings_real = self.facenet.run(batch_portraits, num_gpus=num_gpus, assume_frozen=True)
+            embeddings_fake = self.facenet.run(samples_manipulated, num_gpus=num_gpus, assume_frozen=True)
             
-            samples_manipulated = misc.adjust_dynamic_range(samples_manipulated.astype(np.float32), [-1., 1.], [0, 255])
-            samples_manipulated = np.transpose(samples_manipulated, [0, 2, 3, 1])
-
-            batch_landmarks = misc.adjust_dynamic_range(batch_landmarks.astype(np.float32), [-1., 1.], [0, 255])
-
             for i in range(minibatch_size):
-                try:
-                  ground_truth_lm = batch_landmarks[i]
-                  generated_lm, _ = self.landmark_extractor.generate_landmark_image(source_path_or_image=samples_manipulated[i], resolution=resolution)
-                  generated_lm = generated_lm.cpu().detach().numpy()
-                  ground_truth_lm = np.transpose(ground_truth_lm, [1, 2, 0])
-                  hd_sum += self.calculate_landmark_hausdorff(ground_truth_lm, generated_lm)
-                
-                except Exception as e:
-                  print('Error: Landmark couldnt be extracted from generated output. Skipping the sample')
-                  failed_counter += 1
-                  continue
+                #TODO calculate csim
+                csim_sum += cosine_similarity([embeddings_real[i], embeddings_fake[i]])
                 
             if end == self.num_images:
                 break
-        avg_hd_dist = hd_sum/(self.num_images - failed_counter)
+        avg_csim = csim_sum/self.num_images
         
-        self._report_result(np.real(avg_hd_dist), suffix='/Average Landmark Hausdorff Distance')
-        self._report_result(failed_counter, suffix='/Number of failed landmark extractions')
+        self._report_result(np.real(avg_csim))
         
     #TODO include landmarks
     def _iterate_reals(self, minibatch_size):
