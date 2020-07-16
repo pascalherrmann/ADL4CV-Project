@@ -44,7 +44,7 @@ class FID(metric_base.MetricBase):
         # Calculate statistics for reals.
         cache_file = self._get_cache_file_for_reals(num_images=self.num_images)
         os.makedirs(os.path.dirname(cache_file), exist_ok=True)
-        if os.path.isfile(cache_file) and False:
+        if os.path.isfile(cache_file):
             mu_real, sigma_real = misc.load_pkl(cache_file)
             print("loaded real mu, sigma from cache.")
         else:
@@ -113,7 +113,7 @@ class FID(metric_base.MetricBase):
                 ], axis=0)
                 debug_img = adjust_pixel_range(debug_img)
                 debug_img = fuse_images(debug_img, row=3, col=minibatch_size)
-                save_image("fid_generator_iter_{}08d.png".format(idx), debug_img)
+                save_image("fid_generator_iter_{}08d.png".format(end), debug_img)
 
 
         mu_fake = np.mean(activations, axis=0)
@@ -147,9 +147,13 @@ class FID(metric_base.MetricBase):
             x = tf.placeholder(tf.float32, shape=input_shape, name='real_image')
             x_lm = tf.placeholder(tf.float32, shape=input_shape, name='some_landmark')
 
-            w_enc_1 = Inv.get_output_for(x, phase=False)
-            wp_enc_1 = tf.reshape(w_enc_1, latent_shape)
-            w_enc = E.get_output_for(wp_enc_1, x_lm, phase=False)
+            if self.model_type == "rignet":
+                w_enc_1 = Inv.get_output_for(x, phase=False)
+                wp_enc_1 = tf.reshape(w_enc_1, latent_shape)
+                w_enc = E.get_output_for(wp_enc_1, x_lm, phase=False)
+            else:
+                w_enc = E.get_output_for(x, x_lm, phase=False)
+
             wp_enc = tf.reshape(w_enc, latent_shape)
 
             manipulated_images = Gs.components.synthesis.get_output_for(wp_enc, randomize_noise=False)
@@ -219,9 +223,13 @@ class FID(metric_base.MetricBase):
             x = tf.placeholder(tf.float32, shape=input_shape, name='real_image')
             x_lm = tf.placeholder(tf.float32, shape=input_shape, name='some_landmark')
 
-            w_enc_1 = Inv.get_output_for(x, phase=False)
-            wp_enc_1 = tf.reshape(w_enc_1, latent_shape)
-            w_enc = E.get_output_for(wp_enc_1, x_lm, phase=False)
+            if self.model_type == "rignet":
+                w_enc_1 = Inv.get_output_for(x, phase=False)
+                wp_enc_1 = tf.reshape(w_enc_1, latent_shape)
+                w_enc = E.get_output_for(wp_enc_1, x_lm, phase=False)
+            else:
+                w_enc = E.get_output_for(x, x_lm, phase=False)
+
             wp_enc = tf.reshape(w_enc, latent_shape)
 
             manipulated_images = Gs.components.synthesis.get_output_for(wp_enc, randomize_noise=False)

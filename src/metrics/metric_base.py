@@ -42,12 +42,14 @@ class MetricBase:
         self._mirror_augment = None
         self._results = []
         self._eval_time = None
+        self.model_type = "rignet"
 
-    def run(self, network_pkl, run_dir=None, dataset_args=None, mirror_augment=None, num_gpus=1, tf_config=None, log_results=True):
+    def run(self, network_pkl, run_dir=None, dataset_args=None, mirror_augment=None, num_gpus=1, tf_config=None, log_results=True, model_type = "rignet"):
         self._network_pkl = network_pkl
         self._dataset_args = dataset_args
         self._mirror_augment = mirror_augment
         self._results = []
+        self.model_type = model_type
 
         if (dataset_args is None or mirror_augment is None) and run_dir is not None:
             run_config = misc.parse_config_for_previous_run(run_dir)
