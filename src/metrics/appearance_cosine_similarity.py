@@ -59,9 +59,13 @@ class CSIM(metric_base.MetricBase):
                 in_landmarks_gpu = in_split_landmarks[gpu]
                 in_portraits_gpu = in_split_portraits[gpu]
                 
-                embedded_w = Inv.get_output_for(in_portraits_gpu, phase=True)
-                embedded_w_tensor = tf.reshape(embedded_w, [portraits.shape[0], num_layers, latent_dim])
-                latent_w = E.get_output_for(embedded_w_tensor, in_landmarks_gpu, phase=False)
+                if self.model_type == "rignet":
+                    embedded_w = Inv.get_output_for(in_portraits_gpu, phase=True)
+                    embedded_w_tensor = tf.reshape(embedded_w, [portraits.shape[0], num_layers, latent_dim])
+                    latent_w = E.get_output_for(embedded_w_tensor, in_landmarks_gpu, phase=False)
+                else:
+                    latent_w = E.get_output_for(in_portraits_gpu, in_landmarks_gpu, phase=False)
+
                 latent_wp = tf.reshape(latent_w, [portraits.shape[0], num_layers, latent_dim])
                 fake_X_val = Gs.components.synthesis.get_output_for(latent_wp, randomize_noise=False)
                 out_split.append(fake_X_val)
