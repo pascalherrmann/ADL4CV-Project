@@ -11,6 +11,8 @@ from utils.visualizer import save_image, load_image, resize_image, adjust_pixel_
 from metrics import metric_base
 from training import misc
 
+import config
+from metrics.util import convert_pickle_path_to_name
 
 
 
@@ -139,6 +141,8 @@ class Gallery(metric_base.MetricBase):
 
 
         arr = get_gallery_array(results)
+        path = os.path.join(config.EVALUATION_DIR, self.name + "_" + convert_pickle_path_to_name(self._network_pkl) + ".png")
+        save_image(path, arr)
 
 
         def display_image_in_actual_size(img_arr, title):
@@ -162,6 +166,6 @@ class Gallery(metric_base.MetricBase):
             plt.show()
 
 
-        display_image_in_actual_size(arr, "jo")
+        display_image_in_actual_size(arr, self._network_pkl)
 
 #----------------------------------------------------------------------------

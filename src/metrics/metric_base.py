@@ -18,6 +18,8 @@ import dnnlib.tflib as tflib
 import config
 from training import misc
 from training import dataset
+from metrics.util import convert_pickle_path_to_name, create_dir, write_to_file
+
 
 #----------------------------------------------------------------------------
 # Standard metrics.
@@ -49,6 +51,9 @@ class MetricBase:
         self.model_type = "rignet"
 
     def run(self, network_pkl, run_dir=None, dataset_args=None, mirror_augment=None, num_gpus=1, tf_config=None, log_results=True, model_type = "rignet"):
+
+        create_dir(config.EVALUATION_DIR, exist_ok=True)
+
         self._network_pkl = network_pkl
         self._dataset_args = dataset_args
         self._mirror_augment = mirror_augment
@@ -78,6 +83,9 @@ class MetricBase:
                     print(result_str)
             else:
                 print(result_str)
+
+            result_path = os.path.join(config.EVALUATION_DIR, "result_" + convert_pickle_path_to_name(self._network_pkl) + ".txt")
+            write_to_file(result_str + "\n\n\n", result_path)
 
     def get_result_str(self):
         network_name = os.path.splitext(os.path.basename(self._network_pkl))[0]

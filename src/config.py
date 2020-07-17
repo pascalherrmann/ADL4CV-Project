@@ -40,6 +40,8 @@ KIMG = 0
 INCEPTION_PICKLE_DIR = "/content/gdrive/My Drive/Public/tensorboards_shared/inception_v3_features.pkl"
 FACENET_PB_DIR = "/content/gdrive/My Drive/Public/tensorboards_shared/facenet_model/facenet.pb"
 
+EVALUATION_DIR = "/content/gdrive/My Drive/Public/tensorboards_shared/EVAL"
+
 # =======================
 # End of Configuration
 # =======================
