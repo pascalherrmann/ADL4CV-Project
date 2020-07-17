@@ -30,7 +30,8 @@ ppl_wend = dnnlib.EasyDict(func_name='metrics.perceptual_path_length.PPL', name=
 ls = dnnlib.EasyDict(func_name='metrics.linear_separability.LS', name='ls', num_samples=200000, num_keep=100000, attrib_indices=range(40), minibatch_per_gpu=4)
 lm_hd = dnnlib.EasyDict(func_name='metrics.landmark_hausdorff.LMHausdorff', name='lm_hd', num_images=1000, minibatch_per_gpu=16)
 csim = dnnlib.EasyDict(func_name='metrics.appearance_cosine_similarity.CSIM', name='csim', num_images=1000, minibatch_per_gpu=16)
-dummy = dnnlib.EasyDict(func_name='metrics.metric_base.DummyMetric', name='dummy') # for debugging
+gallery = dnnlib.EasyDict(func_name="metrics.qualitative.Gallery", name="gallery", img_folder="/content/ADL4CV-Project/src/ADL4CV-Project/evaluation/data/PRESENTATION_IMG", lm_folder="/content/ADL4CV-Project/src/ADL4CV-Project/evaluation/data/PRESENTATION_LM", minibatch_per_gpu=16)
+dummy = dnnlib.EasyDict(func_name='metrics.metric_base.DummyMetric', name='dummy', minibatch_per_gpu=16) # for debugging
 
 #----------------------------------------------------------------------------
 # Base class for metrics.
