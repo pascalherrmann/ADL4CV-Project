@@ -101,7 +101,7 @@ def E_loss(E, G, D, Inv, perceptual_model, real_portraits, shuffled_portraits, r
 
 #----------------------------------------------------------------------------
 # Discriminator loss function.
-def D_logistic_simplegp(E, G, D, Inv, real_portraits, shuffled_portraits, real_landmarks, training_flag, r1_gamma=10.0):
+def D_logistic_simplegp(E, G, D, Inv, real_portraits, shuffled_portraits, real_landmarks, real_keypoints, training_flag, r1_gamma=10.0):
 
     with tf.device("/cpu:0"):
         appearance_flag = tf.math.equal(training_flag, "appearance")
@@ -112,7 +112,7 @@ def D_logistic_simplegp(E, G, D, Inv, real_portraits, shuffled_portraits, real_l
     embedded_w = Inv.get_output_for(portraits, phase=True)
     embedded_w_tensor = tf.reshape(embedded_w, [portraits.shape[0], num_layers, latent_dim])
     
-    latent_w = E.get_output_for(embedded_w_tensor, real_landmarks, phase=True)
+    latent_w = E.get_output_for(embedded_w_tensor, real_keypoints, phase=True)
     latent_wp = tf.reshape(latent_w, [portraits.shape[0], num_layers, latent_dim]) # make synthetic from shuffled ones!
     fake_X = G.components.synthesis.get_output_for(latent_wp, randomize_noise=False)
     real_scores_out = fp32(D.get_output_for(real_portraits, real_landmarks, None)) # real portraits, real landmarks
