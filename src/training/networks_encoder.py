@@ -135,6 +135,7 @@ def Encoder(embedded_w, input_keypoints, size=128, filter=64, filter_max=512, nu
     with tf.variable_scope('encoder'):
         with tf.variable_scope('landmark_encoder_fc'):
             lm_context= dense(input_keypoints, 160, gain=1, use_wscale=False)
+            lm_context = leaky_relu(bn(lm_context, phase=phase, name='bn_keypoint_encoder'))
             lm_context = tf.reshape(lm_context, [batch_size, 1, 160])
             lm_context = tf.tile(lm_context, [1,12,1])
         
