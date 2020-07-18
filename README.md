@@ -1,6 +1,6 @@
 # ADL4CV-Project
 
-## Training / Experiments
+## Run Training-Experiments
 
 To achieve reproducable & saved results, the following process is recommended:
 
@@ -14,7 +14,7 @@ To achieve reproducable & saved results, the following process is recommended:
 
 Clone project & checkout branch
 
-```
+```python
 !git clone https://adl4cv:GitHub111!@github.com/pascalherrmann/ADL4CV-Project
 %cd /content/ADL4CV-Project/src
 !git checkout run/<your branch you want to run>
@@ -22,7 +22,7 @@ Clone project & checkout branch
 
 Import 1.x version of tensorflow & Connect Google Drive
 
-```
+```python
 %tensorflow_version 1.x
 import tensorflow as tf
 print(tf.__version__)
@@ -36,6 +36,6 @@ drive.mount('/content/gdrive')
 
 Run Training
 
-```
+```python
 !python train_encoder.py
 ```
