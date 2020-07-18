@@ -180,14 +180,14 @@ def training_loop(
         placeholder_real_landmarks_train = tf.placeholder(tf.float32, [submit_config.batch_size, 3, submit_config.image_size, submit_config.image_size], name='placeholder_real_landmarks_train')
         placeholder_real_shuffled_train = tf.placeholder(tf.float32, [submit_config.batch_size, 3, submit_config.image_size, submit_config.image_size], name='placeholder_real_shuffled_train')
         placeholder_landmarks_shuffled_train = tf.placeholder(tf.float32, [submit_config.batch_size, 3, submit_config.image_size, submit_config.image_size], name='placeholder_landmarks_shuffled_train')
-        placeholder_keypoints_train = tf.placeholder(tf.float32, [submit_config.batch_size, 69], name='placeholder_keypoints_train')
-        placeholder_keypoints_shuffled_train = tf.placeholder(tf.float32, [submit_config.batch_size, 69], name='placeholder_keypoints_shuffled_train')
+        placeholder_keypoints_train = tf.placeholder(tf.float32, [submit_config.batch_size, 136], name='placeholder_keypoints_train')
+        placeholder_keypoints_shuffled_train = tf.placeholder(tf.float32, [submit_config.batch_size, 136], name='placeholder_keypoints_shuffled_train')
 
         placeholder_real_portraits_test = tf.placeholder(tf.float32, [submit_config.batch_size_test, 3, submit_config.image_size, submit_config.image_size], name='placeholder_real_portraits_test')
         placeholder_real_landmarks_test = tf.placeholder(tf.float32, [submit_config.batch_size_test, 3, submit_config.image_size, submit_config.image_size], name='placeholder_real_landmarks_test')
         placeholder_real_shuffled_test = tf.placeholder(tf.float32, [submit_config.batch_size_test, 3, submit_config.image_size, submit_config.image_size], name='placeholder_real_shuffled_test')
         placeholder_real_landmarks_shuffled_test = tf.placeholder(tf.float32, [submit_config.batch_size_test, 3, submit_config.image_size, submit_config.image_size], name='placeholder_real_landmarks_shuffled_test')
-        placeholder_real_keypoints_test = tf.placeholder(tf.float32, [submit_config.batch_size, 69], name='placeholder_real_keypoints_test')
+        placeholder_real_keypoints_test = tf.placeholder(tf.float32, [submit_config.batch_size_test, 136], name='placeholder_real_keypoints_test')
 
         
         real_split_landmarks = tf.split(placeholder_real_landmarks_train, num_or_size_splits=submit_config.num_gpus, axis=0)
@@ -325,7 +325,7 @@ def training_loop(
         
         training_flag = "pose"
         
-        feed_dict_1 = {placeholder_real_portraits_train: batch_portraits, placeholder_keypoints_train: keypoints, placeholder_real_shuffled_train:batch_shuffled, placeholder_keypoints_shuffled_train:keypoints_shuffled, placeholder_training_flag: training_flag}
+        feed_dict_1 = {placeholder_real_portraits_train: batch_portraits, placeholder_real_landmarks_train: batch_landmarks, placeholder_keypoints_train: keypoints, placeholder_real_shuffled_train:batch_shuffled, placeholder_landmarks_shuffled_train: batch_lm_shuffled, placeholder_keypoints_shuffled_train:keypoints_shuffled, placeholder_training_flag: training_flag}
         # here we query these encoder- and discriminator losses. as input we provide: batch_stacks = batch of images + landmarks.
         _, recon_, adv_ = sess.run([E_train_op, E_loss_rec, E_loss_adv], feed_dict_1)
         _, d_r_, d_f_, d_g_= sess.run([D_train_op, D_loss_real, D_loss_fake, D_loss_grad], feed_dict_1)
