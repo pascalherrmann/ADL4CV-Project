@@ -311,6 +311,7 @@ def training_loop(
         batch = sess.run(stack_batch_train)
         batch_stacks = batch[0]
         keypoints = batch[1]
+        keypoints = misc.adjust_dynamic_range(keypoints.astype(np.float32), [0, 127], [-1., 1.])
         
         batch_portraits = batch_stacks[:,0,:,:,:]
         batch_landmarks = batch_stacks[:,1,:,:,:]
@@ -318,6 +319,7 @@ def training_loop(
         batch_secondary = sess.run(stack_batch_train_secondary)
         batch_stacks_secondary = batch_secondary[0]
         keypoints_shuffled = batch_secondary[1]
+        keypoints_shuffled = misc.adjust_dynamic_range(keypoints_shuffled.astype(np.float32), [0, 127], [-1., 1.])
 
         batch_shuffled = batch_stacks_secondary[:,0,:,:,:]
         batch_lm_shuffled = batch_stacks_secondary[:,1,:,:,:]
@@ -345,6 +347,7 @@ def training_loop(
             batch = sess.run(stack_batch_test)
             batch_stacks_test = batch[0]
             keypoints = batch[1]
+            keypoints = misc.adjust_dynamic_range(keypoints.astype(np.float32), [0, 127], [-1., 1.])
             
             batch_portraits_test = batch_stacks_test[:,0,:,:,:]
             batch_landmarks_test = batch_stacks_test[:,1,:,:,:]
@@ -352,6 +355,7 @@ def training_loop(
             batch_secondary_test = sess.run(stack_batch_test_secondary)
             batch_stacks_test_secondary = batch_secondary_test[0]
             keypoints_shuffled = batch_secondary_test[1]
+            keypoints_shuffled = misc.adjust_dynamic_range(keypoints_shuffled.astype(np.float32), [0, 127], [-1., 1.])
             
             batch_shuffled_test = batch_stacks_test_secondary[:,0,:,:,:]
             batch_shuffled_lm_test = batch_stacks_test_secondary[:,1,:,:,:]
