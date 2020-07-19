@@ -128,7 +128,7 @@ def Encoder(embedded_w, input_keypoints, size=128, filter=64, filter_max=512, nu
     
     batch_size =  tf.shape(embedded_w)[0];
     
-    input_keypoints.set_shape([None, 136])
+    input_keypoints.set_shape([None, 69])
 
     #input_concatenated = tf.concat((input_img, input_landmarks), axis=1) # [0: batch, 1: channels, 2,3: hw]
 
