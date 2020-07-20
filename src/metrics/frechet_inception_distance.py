@@ -49,7 +49,8 @@ class FID(metric_base.MetricBase):
             print("loaded real mu, sigma from cache.")
         else:
             progress = 0
-            for idx, batch_stacks in tqdm(enumerate(self._iterate_reals(minibatch_size=minibatch_size)), position=0, leave=True):
+            for idx, data in tqdm(enumerate(self._iterate_reals(minibatch_size=minibatch_size)), position=0, leave=True):
+                batch_stacks = data[0]
                 progress += batch_stacks.shape[0]
                 images = batch_stacks[:,0,:,:,:]
                 landmarks = batch_stacks[:,1,:,:,:]
@@ -146,11 +147,16 @@ class FID(metric_base.MetricBase):
 
             x = tf.placeholder(tf.float32, shape=input_shape, name='real_image')
             x_lm = tf.placeholder(tf.float32, shape=input_shape, name='some_landmark')
+            x_kp = tf.placeholder(tf.float32, shape=[self.minibatch_per_gpu, 136], name='some_keypoints')
 
             if self.model_type == "rignet":
                 w_enc_1 = Inv.get_output_for(x, phase=False)
                 wp_enc_1 = tf.reshape(w_enc_1, latent_shape)
                 w_enc = E.get_output_for(wp_enc_1, x_lm, phase=False)
+            elif self.model_type == "keypoints":
+                w_enc_1 = Inv.get_output_for(x, phase=False)
+                wp_enc_1 = tf.reshape(w_enc_1, latent_shape)
+                w_enc = E.get_output_for(wp_enc_1, x_kp, phase=False)
             else:
                 w_enc = E.get_output_for(x, x_lm, phase=False)
 
@@ -160,17 +166,18 @@ class FID(metric_base.MetricBase):
             manipulated_images = tflib.convert_images_to_uint8(manipulated_images)
             inception_codes = inception_clone.get_output_for(manipulated_images) # shape (8, 2048)
 
-        for idx, batch_stacks in tqdm(enumerate(self._iterate_reals(minibatch_size=minibatch_size)), position=0, leave=True):
-
+        for idx, data in tqdm(enumerate(self._iterate_reals(minibatch_size=minibatch_size)), position=0, leave=True):
+            batch_stacks = data[0]
             images = batch_stacks[:,0,:,:,:]    # shape (8, 3, 128, 128)
             landmarks = batch_stacks[:,1,:,:,:] # shape (8, 3, 128, 128)
             images = images.astype(np.float32) / 255 * 2.0 - 1.0
             landmarks = landmarks.astype(np.float32) / 255 * 2.0 - 1.0
+            keypoints = np.roll(data[1], shift=1, axis=0)
 
             begin = idx * minibatch_size
             end = min(begin + minibatch_size, self.num_images) # begin: 0; end: 8
 
-            activations[begin:end], manip  = tflib.run([inception_codes, manipulated_images], feed_dict={x:images, x_lm:landmarks})
+            activations[begin:end], manip  = tflib.run([inception_codes, manipulated_images], feed_dict={x:images, x_lm:landmarks, x_kp:keypoints})
             # acivations: (5000, 2048)
 
 
@@ -313,8 +320,8 @@ class FID(metric_base.MetricBase):
             manipulated_images = tflib.convert_images_to_uint8(manipulated_images)
             inception_codes = inception_clone.get_output_for(manipulated_images)
 
-        for idx, batch_stacks in tqdm(enumerate(self._iterate_reals(minibatch_size=minibatch_size)), position=0, leave=True):
-
+        for idx, data in tqdm(enumerate(self._iterate_reals(minibatch_size=minibatch_size)), position=0, leave=True):
+            batch_stacks = data[0]
             images = batch_stacks[:,0,:,:,:]
             landmarks = batch_stacks[:,1,:,:,:]
             images = images.astype(np.float32) / 255 * 2.0 - 1.0
