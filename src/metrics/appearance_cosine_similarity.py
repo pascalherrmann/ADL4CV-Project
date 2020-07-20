@@ -46,7 +46,7 @@ class CSIM(metric_base.MetricBase):
       
         return emb_array
 
-def run_image_manipulation(self, E, Gs, Inv, portraits, landmarks, keypoints, num_gpus):
+    def run_image_manipulation(self, E, Gs, Inv, portraits, landmarks, keypoints, num_gpus):
         out_split = []
         num_layers, latent_dim = Gs.components.synthesis.input_shape[1:3]
         
