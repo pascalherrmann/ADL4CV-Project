@@ -45,7 +45,7 @@ def parse_tfrecord_tf(record):
     portrait = tf.reshape(portrait, (1, features['shape'][0], features['shape'][1], features['shape'][2]))
     landmark = tf.reshape(landmark, (1, features['shape'][0], features['shape'][1], features['shape'][2]))
     data = tf.concat((portrait, landmark), axis=0)
-    return [data, features['keypoints']]
+    return [data, np.concatenate((features['keypoints'][:48], features['keypoints'][60:68]))]
 
 
 #
@@ -180,14 +180,14 @@ def training_loop(
         placeholder_real_landmarks_train = tf.placeholder(tf.float32, [submit_config.batch_size, 3, submit_config.image_size, submit_config.image_size], name='placeholder_real_landmarks_train')
         placeholder_real_shuffled_train = tf.placeholder(tf.float32, [submit_config.batch_size, 3, submit_config.image_size, submit_config.image_size], name='placeholder_real_shuffled_train')
         placeholder_landmarks_shuffled_train = tf.placeholder(tf.float32, [submit_config.batch_size, 3, submit_config.image_size, submit_config.image_size], name='placeholder_landmarks_shuffled_train')
-        placeholder_keypoints_train = tf.placeholder(tf.float32, [submit_config.batch_size, 136], name='placeholder_keypoints_train')
-        placeholder_keypoints_shuffled_train = tf.placeholder(tf.float32, [submit_config.batch_size, 136], name='placeholder_keypoints_shuffled_train')
+        placeholder_keypoints_train = tf.placeholder(tf.float32, [submit_config.batch_size, 62], name='placeholder_keypoints_train')
+        placeholder_keypoints_shuffled_train = tf.placeholder(tf.float32, [submit_config.batch_size, 62], name='placeholder_keypoints_shuffled_train')
 
         placeholder_real_portraits_test = tf.placeholder(tf.float32, [submit_config.batch_size_test, 3, submit_config.image_size, submit_config.image_size], name='placeholder_real_portraits_test')
         placeholder_real_landmarks_test = tf.placeholder(tf.float32, [submit_config.batch_size_test, 3, submit_config.image_size, submit_config.image_size], name='placeholder_real_landmarks_test')
         placeholder_real_shuffled_test = tf.placeholder(tf.float32, [submit_config.batch_size_test, 3, submit_config.image_size, submit_config.image_size], name='placeholder_real_shuffled_test')
         placeholder_real_landmarks_shuffled_test = tf.placeholder(tf.float32, [submit_config.batch_size_test, 3, submit_config.image_size, submit_config.image_size], name='placeholder_real_landmarks_shuffled_test')
-        placeholder_real_keypoints_test = tf.placeholder(tf.float32, [submit_config.batch_size_test, 136], name='placeholder_real_keypoints_test')
+        placeholder_real_keypoints_test = tf.placeholder(tf.float32, [submit_config.batch_size_test, 62], name='placeholder_real_keypoints_test')
 
         
         real_split_landmarks = tf.split(placeholder_real_landmarks_train, num_or_size_splits=submit_config.num_gpus, axis=0)
