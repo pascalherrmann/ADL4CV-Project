@@ -46,23 +46,29 @@ class CSIM(metric_base.MetricBase):
       
         return emb_array
 
-    def run_image_manipulation(self, E, Gs, Inv, portraits, landmarks, num_gpus):
+def run_image_manipulation(self, E, Gs, Inv, portraits, landmarks, keypoints, num_gpus):
         out_split = []
         num_layers, latent_dim = Gs.components.synthesis.input_shape[1:3]
         
         with tf.device("/cpu:0"):
             in_split_portraits = tf.split(portraits, num_or_size_splits=num_gpus, axis=0)
             in_split_landmarks = tf.split(landmarks, num_or_size_splits=num_gpus, axis=0)
+            in_split_keypoints = tf.split(keypoints, num_or_size_splits=num_gpus, axis=0)
         
         for gpu in range(num_gpus):
             with tf.device("/gpu:%d" % gpu):
                 in_landmarks_gpu = in_split_landmarks[gpu]
                 in_portraits_gpu = in_split_portraits[gpu]
+                in_keypoints_gpu = in_split_keypoints[gpu]
                 
                 if self.model_type == "rignet":
                     embedded_w = Inv.get_output_for(in_portraits_gpu, phase=True)
                     embedded_w_tensor = tf.reshape(embedded_w, [portraits.shape[0], num_layers, latent_dim])
                     latent_w = E.get_output_for(embedded_w_tensor, in_landmarks_gpu, phase=False)
+                elif self.model_type == 'keypoints':
+                    embedded_w = Inv.get_output_for(in_portraits_gpu, phase=True)
+                    embedded_w_tensor = tf.reshape(embedded_w, [portraits.shape[0], num_layers, latent_dim])
+                    latent_w = E.get_output_for(embedded_w_tensor, in_keypoints_gpu, phase=False)
                 else:
                     latent_w = E.get_output_for(in_portraits_gpu, in_landmarks_gpu, phase=False)
 
@@ -81,21 +87,25 @@ class CSIM(metric_base.MetricBase):
         
         placeholder_portraits = tf.placeholder(tf.float32, [self.minibatch_per_gpu, 3, resolution, resolution], name='placeholder_portraits')
         placeholder_landmarks = tf.placeholder(tf.float32, [self.minibatch_per_gpu, 3, resolution, resolution], name='placeholder_landmarks')
+        placeholder_keypoints = tf.placeholder(tf.float32, [self.minibatch_per_gpu, 136], name='placeholder_landmarks')
         
-        fake_X_val = self.run_image_manipulation(E, Gs, Inv, placeholder_portraits, placeholder_landmarks, num_gpus)
+        fake_X_val = self.run_image_manipulation(E, Gs, Inv, placeholder_portraits, placeholder_landmarks, placeholder_keypoints, num_gpus)
         
         csim_sum = 0.0
         
         for idx, data in enumerate(self._iterate_reals(minibatch_size=minibatch_size)):
-            batch_portraits = data[:,0,:,:,:]
-            batch_landmarks = np.roll(data[:,1,:,:,:], shift=1, axis=0)
+            image_data = data[0]
+            batch_portraits = image_data[:,0,:,:,:]
+            batch_landmarks = np.roll(image_data[:,1,:,:,:], shift=1, axis=0)
+            
+            keypoints = np.roll(data[1], shift=1, axis=0)
 
             batch_portraits = misc.adjust_dynamic_range(batch_portraits.astype(np.float32), [0, 255], [-1., 1.])
             batch_landmarks = misc.adjust_dynamic_range(batch_landmarks.astype(np.float32), [0, 255], [-1., 1.])
 
             begin = idx * minibatch_size
             end = min(begin + minibatch_size, self.num_images)
-            samples_manipulated = tflib.run(fake_X_val, feed_dict={placeholder_portraits: batch_portraits, placeholder_landmarks: batch_landmarks})
+            samples_manipulated = tflib.run(fake_X_val, feed_dict={placeholder_portraits: batch_portraits, placeholder_landmarks: batch_landmarks, placeholder_keypoints: keypoints})
             
             samples_manipulated = np.transpose(samples_manipulated, [0, 2, 3, 1])
             samples_manipulated = np.pad(samples_manipulated, ((0, 0), (11, 11), (11, 11), (0, 0)), mode='constant')

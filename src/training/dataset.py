@@ -21,13 +21,14 @@ def parse_tfrecord_tf(record):
     features = tf.parse_single_example(record, features={
         'shape': tf.FixedLenFeature([3], tf.int64),
         'portrait': tf.FixedLenFeature([], tf.string),
-        'landmark': tf.FixedLenFeature([], tf.string)})
+        'landmark': tf.FixedLenFeature([], tf.string),
+        'keypoints': tf.FixedLenSequenceFeature([], tf.float32, allow_missing = True)})
     portrait = tf.decode_raw(features['portrait'], tf.uint8)
     landmark = tf.decode_raw(features['landmark'], tf.uint8)
     portrait = tf.reshape(portrait, (1, features['shape'][0], features['shape'][1], features['shape'][2]))
     landmark = tf.reshape(landmark, (1, features['shape'][0], features['shape'][1], features['shape'][2]))
     data = tf.concat((portrait, landmark), axis=0)
-    return data
+    return [data, features['keypoints']]
 
 
 def parse_tfrecord_np(record):
