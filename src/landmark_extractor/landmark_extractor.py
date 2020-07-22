@@ -1,7 +1,10 @@
-"""
-Created on Fri May 15 15:21:29 2020
-@author: Tobias Zengerle
-"""
+#References
+#Keypoint extraction model used from
+#https://www.adrianbulat.com/face-alignment
+#
+#Landmark image creation adoped from
+#https://github.com/vincent-thevenin/Realistic-Neural-Talking-Head-Models
+
 from matplotlib import pyplot as plt
 import numpy as np
 import torch

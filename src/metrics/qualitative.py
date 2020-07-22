@@ -27,6 +27,13 @@ def get_test_images_paths(dir):
             img_paths.append(os.path.join(dir, file))
     return sorted(img_paths)
 
+def get_keypoint_vectors_paths(dir):
+    img_paths = []
+    for file in os.listdir(dir):
+        if file.endswith(".csv"):
+            img_paths.append(os.path.join(dir, file))
+    return sorted(img_paths)
+
 def load_test_images(dir, image_size = 128):
     img_paths = get_test_images_paths(dir)
     imgs = []
@@ -37,21 +44,33 @@ def load_test_images(dir, image_size = 128):
 
     return imgs
 
+def load_keypoint_vectors(dir):
+    kp_paths = get_keypoint_vectors_paths(dir)
+    kps = []
+
+    for i, kp_path in enumerate(kp_paths):
+        KP = np.loadtxt(kp_path, delimiter=',')
+        kps.append(KP)
+
+    return imgs
+
 #----------------------------------------------------------------------------
 #----------------------------------------------------------------------------
 
 
 class Gallery(metric_base.MetricBase):
-    def __init__(self, img_folder, lm_folder, minibatch_per_gpu, **kwargs):
+    def __init__(self, img_folder, lm_folder, kp_folder, minibatch_per_gpu, **kwargs):
         super().__init__(**kwargs)
         self.img_folder = img_folder
         self.lm_folder = lm_folder
+        self.kp_folder = kp_folder
         self.minibatch_per_gpu = minibatch_per_gpu
 
     def _evaluate(self, Gs, E, Inv, num_gpus):
 
         loaded_imgs = load_test_images(self.img_folder)
         loaded_landmarks = load_test_images(self.lm_folder)
+        loaded_keypoints = load_keypoint_vectors(self.kp_folder)
         minibatch_size = num_gpus * self.minibatch_per_gpu
 
 
@@ -77,11 +96,16 @@ class Gallery(metric_base.MetricBase):
         print(f'Building graph.')
         x = tf.placeholder(tf.float32, shape=input_shape, name='real_image')
         x_lm = tf.placeholder(tf.float32, shape=input_shape, name='some_landmark')
+        x_kp = tf.placeholder(tf.float32, shape=[self.minibatch_per_gpu, 136], name='some_keypoints')
 
         if self.model_type == "rignet":
             w_enc_1 = Inv.get_output_for(x, phase=False)
             wp_enc_1 = tf.reshape(w_enc_1, latent_shape)
             w_enc = E.get_output_for(wp_enc_1, x_lm, phase=False)
+        elif self.model_type == "keypoints":
+            w_enc_1 = Inv.get_output_for(x, phase=False)
+            wp_enc_1 = tf.reshape(w_enc_1, latent_shape)
+            w_enc = E.get_output_for(wp_enc_1, x_kp, phase=False)
         else:
             w_enc = E.get_output_for(x, x_lm, phase=False)
         wp_enc = tf.reshape(w_enc, latent_shape)
@@ -92,24 +116,27 @@ class Gallery(metric_base.MetricBase):
 
 
 
-        def get_landmark_row(lm, img_list):
+        def get_landmark_row(lm, kp, img_list):
             displayed_imgs = [lm]
 
             # the np variables we'll build to feed to graph!
             batch_images = np.zeros(input_shape, np.uint8)
             batch_lms = np.zeros(input_shape, np.uint8)
+            batch_kps = np.zeros([self.minibatch_per_gpu, 136], np.float32)
 
             for img_idx in tqdm(range(0, len(img_list), self.minibatch_per_gpu), leave=False):
                 batch = img_list[img_idx:img_idx + self.minibatch_per_gpu]
                 for i, image in enumerate(batch):
                     batch_images[i] = np.transpose(image, [2, 0, 1])
                     batch_lms[i] = np.transpose(lm, [2, 0, 1])
+                    batch_kps[i] = kp
 
                 inputs = batch_images.astype(np.float32) / 255 * 2.0 - 1.0
                 inputs_lm = batch_lms.astype(np.float32) / 255 * 2.0 - 1.0
+                input_kp = batch_kps
 
                 # Run encoder.
-                outputs = tflib.run(manipulated_images, {x: inputs, x_lm: inputs_lm})
+                outputs = tflib.run(manipulated_images, {x: inputs, x_lm: inputs_lm, x_kp: input_kp})
                 outputs = adjust_pixel_range(outputs, min_val=0, max_val=255) # 16 x 128 x 128 x 3
                 for i, _ in enumerate(batch):
                     displayed_imgs.append(outputs[i])
@@ -123,8 +150,8 @@ class Gallery(metric_base.MetricBase):
         results = [header]
         print("rsultss", len(results))
         print("resuls[0]", len(results[0]))
-        for sample_landmark in loaded_landmarks:
-            current_result = get_landmark_row(sample_landmark, loaded_imgs)
+        for idx, sample_landmark in loaded_landmarks:
+            current_result = get_landmark_row(sample_landmark, loaded_keypoints[idx], loaded_imgs)
             results.append(current_result)
 
 

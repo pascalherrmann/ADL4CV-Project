@@ -1,10 +1,3 @@
-# Copyright (c) 2019, NVIDIA CORPORATION. All rights reserved.
-#
-# This work is licensed under the Creative Commons Attribution-NonCommercial
-# 4.0 International License. To view a copy of this license, visit
-# http://creativecommons.org/licenses/by-nc/4.0/ or send a letter to
-# Creative Commons, PO Box 1866, Mountain View, CA 94042, USA.
-
 """Tool for creating multi-resolution TFRecords datasets for StyleGAN and ProGAN."""
 
 # pylint: disable=too-many-lines
@@ -18,9 +11,16 @@ import traceback
 import numpy as np
 import tensorflow as tf
 import PIL.Image
-import dnnlib.tflib as tflib
+import csv
 
 from training import dataset
+
+import dnnlib.tflib as tflib
+tflib.init_tf()
+
+from training import misc
+from training.dataset import parse_multi_resolution_tfrecord_tf
+from landmark_extractor.landmark_extractor import FaceLandmarkExtractor
 
 #----------------------------------------------------------------------------
 
@@ -31,9 +31,12 @@ def error(msg):
 #----------------------------------------------------------------------------
 
 class TFRecordExporter:
-    def __init__(self, tfrecord_dir, expected_images, print_progress=True, progress_interval=10):
+    def __init__(self, tfrecord_dir, expected_images, tfr_prefix = '', print_progress=True, progress_interval=10):
         self.tfrecord_dir       = tfrecord_dir
-        self.tfr_prefix         = os.path.join(self.tfrecord_dir, os.path.basename(self.tfrecord_dir))
+        if tfr_prefix != '':
+            self.tfr_prefix = tfr_prefix
+        else:
+            self.tfr_prefix         = os.path.join(self.tfrecord_dir, os.path.basename(self.tfrecord_dir))
         self.expected_images    = expected_images
         self.cur_images         = 0
         self.shape              = None
@@ -85,6 +88,67 @@ class TFRecordExporter:
             ex = tf.train.Example(features=tf.train.Features(feature={
                 'shape': tf.train.Feature(int64_list=tf.train.Int64List(value=quant.shape)),
                 'data': tf.train.Feature(bytes_list=tf.train.BytesList(value=[quant.tostring()]))}))
+            tfr_writer.write(ex.SerializeToString())
+        self.cur_images += 1
+        
+    def add_image_pair(self, img1, img2):
+        if self.print_progress and self.cur_images % self.progress_interval == 0:
+            print('%d / %d\r' % (self.cur_images, self.expected_images), end='', flush=True)
+        if self.shape is None:
+            self.shape = img1.shape
+            self.resolution_log2 = int(np.log2(self.shape[1]))
+            assert self.shape[0] in [1, 3]
+            assert self.shape[1] == self.shape[2]
+            assert self.shape[1] == 2**self.resolution_log2
+            tfr_opt = tf.io.TFRecordOptions(compression_type='')
+            for lod in range(1):# self.resolution_log2 - 1):
+                tfr_file = self.tfr_prefix + '-r%02d.tfrecords' % (self.resolution_log2 - lod)
+                self.tfr_writers.append(tf.io.TFRecordWriter(tfr_file, tfr_opt))
+        assert img1.shape == self.shape
+        for lod, tfr_writer in enumerate(self.tfr_writers):
+            if lod:
+                img1 = img1.astype(np.float32)
+                img1 = (img1[:, 0::2, 0::2] + img1[:, 0::2, 1::2] + img1[:, 1::2, 0::2] + img1[:, 1::2, 1::2]) * 0.25
+                
+                img2 = img2.astype(np.float32)
+                img2 = (img2[:, 0::2, 0::2] + img2[:, 0::2, 1::2] + img2[:, 1::2, 0::2] + img2[:, 1::2, 1::2]) * 0.25
+            quant1 = np.rint(img1).clip(0, 255).astype(np.uint8)
+            quant2 = np.rint(img2).clip(0, 255).astype(np.uint8)
+            ex = tf.train.Example(features=tf.train.Features(feature={
+                'shape': tf.train.Feature(int64_list=tf.train.Int64List(value=quant1.shape)),
+                'portrait': tf.train.Feature(bytes_list=tf.train.BytesList(value=[quant1.tostring()])),
+                'landmark': tf.train.Feature(bytes_list=tf.train.BytesList(value=[quant2.tostring()]))}))
+            tfr_writer.write(ex.SerializeToString())
+        self.cur_images += 1
+    
+    def add_image_pair_with_keypoints(self, img1, img2, keypoints):
+        if self.print_progress and self.cur_images % self.progress_interval == 0:
+            print('%d / %d\r' % (self.cur_images, self.expected_images), end='', flush=True)
+        if self.shape is None:
+            self.shape = img1.shape
+            self.resolution_log2 = int(np.log2(self.shape[1]))
+            assert self.shape[0] in [1, 3]
+            assert self.shape[1] == self.shape[2]
+            assert self.shape[1] == 2**self.resolution_log2
+            tfr_opt = tf.io.TFRecordOptions(compression_type='')
+            for lod in range(1):# self.resolution_log2 - 1):
+                tfr_file = self.tfr_prefix + '-r%02d.tfrecords' % (self.resolution_log2 - lod)
+                self.tfr_writers.append(tf.io.TFRecordWriter(tfr_file, tfr_opt))
+        assert img1.shape == self.shape
+        for lod, tfr_writer in enumerate(self.tfr_writers):
+            if lod:
+                img1 = img1.astype(np.float32)
+                img1 = (img1[:, 0::2, 0::2] + img1[:, 0::2, 1::2] + img1[:, 1::2, 0::2] + img1[:, 1::2, 1::2]) * 0.25
+                
+                img2 = img2.astype(np.float32)
+                img2 = (img2[:, 0::2, 0::2] + img2[:, 0::2, 1::2] + img2[:, 1::2, 0::2] + img2[:, 1::2, 1::2]) * 0.25
+            quant1 = np.rint(img1).clip(0, 255).astype(np.uint8)
+            quant2 = np.rint(img2).clip(0, 255).astype(np.uint8)
+            ex = tf.train.Example(features=tf.train.Features(feature={
+                'shape': tf.train.Feature(int64_list=tf.train.Int64List(value=quant1.shape)),
+                'portrait': tf.train.Feature(bytes_list=tf.train.BytesList(value=[quant1.tostring()])),
+                'landmark': tf.train.Feature(bytes_list=tf.train.BytesList(value=[quant2.tostring()])),
+                'keypoints': tf.train.Feature(float_list=tf.train.FloatList(value=[float(x) for x in keypoints.flatten()]))}))
             tfr_writer.write(ex.SerializeToString())
         self.cur_images += 1
 
@@ -526,6 +590,203 @@ def create_from_images(tfrecord_dir, image_dir, shuffle):
                 img = img.transpose([2, 0, 1]) # HWC => CHW
             tfr.add_image(img)
 
+#----------------------------------------------------------------------------
+            
+def create_from_image_pair(tfrecord_dir, image1_dir, image2_dir, keypoint_csv_dir, shuffle):
+    print('Loading images from "%s"' % image1_dir) #TODO Add second dir to message
+    import pathlib
+    image1_filenames = sorted(pathlib.Path(image1_dir).rglob("*.png"))
+    image2_filenames = sorted(pathlib.Path(image2_dir).rglob("*.png"))
+    if len(image1_filenames) == 0:
+        error('No input images found')
+
+    img1 = np.asarray(PIL.Image.open(image1_filenames[0]).convert('RGB'))
+    img2 = np.asarray(PIL.Image.open(image2_filenames[0]).convert('RGB'))
+    resolution = img1.shape[0]
+    channels = img1.shape[2] if img1.ndim == 3 else 1
+    
+    if img1.shape[1] != resolution:
+        error('Input images must have the same width and height')
+    if resolution != 2 ** int(np.floor(np.log2(resolution))):
+        error('Input image resolution must be a power-of-two')
+    if channels not in [1, 3]:
+        error('Input images must be stored as RGB or grayscale')
+
+    print(f'Expecting {len(image1_filenames)} Images')
+    print(len(image2_filenames))
+    
+    #set up parallel file writing
+    num_threads=16
+    subset_length = len(image1_filenames)/num_threads
+    img1_subset_list = []
+    img2_subset_list = []
+    for i in range(num_threads):
+        img1_subset_list.append(image1_filenames[int(i*subset_length):int((i+1)*subset_length)])
+        img2_subset_list.append(image2_filenames[int(i*subset_length):int((i+1)*subset_length)])
+
+    import multiprocessing
+    
+    coord = tf.train.Coordinator()
+    processes = []
+    
+    # Create the processes
+    for thread_index in range(num_threads):
+        if keypoint_csv_dir != '':
+            params = (
+                tfrecord_dir,
+                img1_subset_list[thread_index],
+                img2_subset_list[thread_index],
+                image1_dir,
+                keypoint_csv_dir,
+                channels,
+                thread_index
+            )
+    
+            thread_process = multiprocessing.Process(
+                target=create_dataset_subset_with_keypoints,
+                args=params
+            )
+        else:
+            params = (
+                tfrecord_dir,
+                img1_subset_list[thread_index],
+                img2_subset_list[thread_index],
+                channels,
+                thread_index
+            )
+            
+            thread_process = multiprocessing.Process(
+                target=create_dataset_subset,
+                args=params
+            )
+    
+        thread_process.start()
+        processes.append(thread_process)
+    coord.join(processes)
+    
+def create_from_tfrecord(tfrecord_dir, input_path, shuffle):
+    print('Loading images from "%s"' % input_path) #TODO Add second dir to message
+    
+    #load tfrecord dataset
+    dset = tf.data.TFRecordDataset(input_path)
+    dset = dset.map(parse_multi_resolution_tfrecord_tf, num_parallel_calls=16)
+    dset = dset.batch(4375)
+    
+    train_iterator = tf.data.Iterator.from_structure(dset.output_types, dset.output_shapes)
+    training_init_op = train_iterator.make_initializer(dset)
+    stack_batch = train_iterator.get_next()
+    tflib.run(training_init_op)
+
+    image_batch = tflib.run(stack_batch)
+
+    portrait_image = image_batch[0]
+    portrait_image = np.transpose(portrait_image, [1,2,0])
+    print(portrait_image.shape)
+    resolution = portrait_image.shape[0]
+    channels = portrait_image.shape[2] if portrait_image.ndim == 3 else 1
+    
+    if portrait_image.shape[1] != resolution:
+        error('Input images must have the same width and height')
+    if resolution != 2 ** int(np.floor(np.log2(resolution))):
+        error('Input image resolution must be a power-of-two')
+    if channels not in [1, 3]:
+        error('Input images must be stored as RGB or grayscale')
+
+    batches = []
+    batches.append(image_batch)
+    for i in range(15):
+        image_batch = tflib.run(stack_batch)
+        batches.append(image_batch)
+    
+    #set up parallel file writing
+    num_threads=16
+    
+    import multiprocessing
+    
+    coord = tf.train.Coordinator()
+    processes = []
+    
+    # Create the processes
+    for thread_index in range(num_threads):
+        params = (
+            tfrecord_dir,
+            batches[thread_index],
+            channels,
+            resolution,
+            thread_index
+        )
+    
+        thread_process = multiprocessing.Process(
+            target=create_dataset_subset_from_tfrecord,
+            args=params
+        )
+    
+        thread_process.start()
+        processes.append(thread_process)
+    coord.join(processes)
+
+def create_dataset_subset(tfrecord_dir, image1_filenames, image2_filenames, channels, thread):
+    with TFRecordExporter(tfrecord_dir, len(image1_filenames), tfr_prefix=os.path.join(tfrecord_dir, os.path.basename(tfrecord_dir) + f'{thread}')) as tfr:
+        for idx in range(len(image1_filenames)):
+            try:
+                img1 = np.asarray(PIL.Image.open(image1_filenames[idx]).convert('RGB'))
+                img2 = np.asarray(PIL.Image.open(image2_filenames[idx]).convert('RGB'))
+                if channels == 1:
+                    img1 = img1[np.newaxis, :, :] # HW => CHW
+                    img2 = img2[np.newaxis, :, :] # HW => CHW
+                else:
+                    img1 = img1.transpose([2, 0, 1]) # HWC => CHW
+                    img2 = img2.transpose([2, 0, 1]) # HWC => CHW
+                tfr.add_image_pair(img1, img2)
+            except:
+                print(f'There was an error with adding an image pair. Skipping index {idx}')
+                continue
+
+def create_dataset_subset_with_keypoints(tfrecord_dir, image1_filenames, image2_filenames, image1_root_dir, keypoint_csv_dir, channels, thread): 
+    with TFRecordExporter(tfrecord_dir, len(image1_filenames), tfr_prefix=os.path.join(tfrecord_dir, os.path.basename(tfrecord_dir) + f'{thread}')) as tfr:
+        for idx in range(len(image1_filenames)):
+            try:
+                img1 = np.asarray(PIL.Image.open(image1_filenames[idx]).convert('RGB'))
+                img2 = np.asarray(PIL.Image.open(image2_filenames[idx]).convert('RGB'))
+                
+                csv_dir = os.path.join(keypoint_csv_dir, os.path.relpath(image1_filenames[idx], image1_root_dir))
+                base = os.path.splitext(csv_dir)[0]
+                csv_dir = base + ".csv"
+
+                keypoints = np.loadtxt(csv_dir, delimiter=',')
+
+                if channels == 1:
+                    img1 = img1[np.newaxis, :, :] # HW => CHW
+                    img2 = img2[np.newaxis, :, :] # HW => CHW
+                else:
+                    img1 = img1.transpose([2, 0, 1]) # HWC => CHW
+                    img2 = img2.transpose([2, 0, 1]) # HWC => CHW
+                tfr.add_image_pair_with_keypoints(img1, img2, keypoints)
+            except:
+                print(f'There was an error with adding an image pair. Skipping index {idx}')
+                continue
+            
+def create_dataset_subset_from_tfrecord(tfrecord_dir, batch, channels, resolution, thread):
+    landmark_extractor = FaceLandmarkExtractor()
+    with TFRecordExporter(tfrecord_dir, len(batch), tfr_prefix=os.path.join(tfrecord_dir, os.path.basename(tfrecord_dir) + f'{thread}')) as tfr:
+        for idx in range(len(batch)):
+            #try:
+            img1 = batch[idx]
+            img1 = np.transpose(img1, [1,2,0])
+            img2, keypoints = landmark_extractor.generate_landmark_image(source_path_or_image=img1, resolution=resolution)
+            import torch
+            cpu = torch.device("cpu")
+            img2 = img2.to(cpu).numpy()
+            if channels == 1:
+                img1 = img1[np.newaxis, :, :] # HW => CHW
+                img2 = img2[np.newaxis, :, :] # HW => CHW
+            else:
+                img1 = np.transpose(img1, [2, 0, 1]) # HWC => CHW
+                img2 = np.transpose(img2, [2, 0, 1]) # HWC => CHW
+            tfr.add_image_pair_with_keypoints(img1, img2, keypoints)
+            #except:
+                #print(f'There was an error with adding an image pair. Skipping index {idx}')
+                #continue
 #----------------------------------------------------------------------------
 
 def create_from_hdf5(tfrecord_dir, hdf5_filename, shuffle):
