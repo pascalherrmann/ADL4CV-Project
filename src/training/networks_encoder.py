@@ -1,3 +1,7 @@
+#References
+#Encoder model inspired by:
+#https://gvv.mpi-inf.mpg.de/projects/StyleRig/
+
 import tensorflow as tf
 import numpy as np
 
@@ -18,6 +22,20 @@ def dense(x, fmaps, gain=np.sqrt(2), use_wscale=False):
     w = get_weight([x.shape[1].value, fmaps], gain=gain, use_wscale=use_wscale)
     w = tf.cast(w, x.dtype)
     return tf.matmul(x, w)
+
+# apply a individual dense layer to each channel of the input (along axis=1)
+# input: w of shape [batch, num_channels, input_filters]
+# output of shape [batch, num_channels, output_filters]
+def channel_independent_dense(x, output_filters, num_channels):
+    batch_size =  tf.shape(x)[0];
+    
+    output_list = []
+    for i in range(num_channels):
+        x_i = x[:,i, :]
+        x_i = dense(x_i, fmaps=output_filters, gain=1, use_wscale=False)
+        x_i = tf.reshape(x_i, [batch_size, 1, output_filters])
+        output_list.append(x_i)
+    return tf.concat(output_list, axis=1)
 
 
 def conv2d(x, fmaps, kernel, gain=np.sqrt(2), use_wscale=False):
@@ -103,33 +121,49 @@ def residual_block_bn(inputs, fin, fout, phase, scope): #resnet v1
     return net
 
 
-def Encoder(input_img, input_landmarks, size=128, filter=64, filter_max=512, num_layers=12, phase=True, **kwargs):
+def Encoder(embedded_w, input_landmarks, size=128, filter=64, filter_max=512, num_layers=12, phase=True, **kwargs):
     #print('using bn encoder phase: ', phase)
     s0 = 4
     num_blocks = int(np.log2(size / s0))
 
     # define input shapes for the network
     # todo: aktuell am imput img nix verändert!!!
-    input_img.set_shape([None, 3, size, size])
+    embedded_w.set_shape([None, num_layers, 512])
 
     input_landmarks.set_shape([None, 3, size, size])
+    
+    batch_size =  tf.shape(embedded_w)[0];
 
-    input_concatenated = tf.concat((input_img, input_landmarks), axis=1) # [0: batch, 1: channels, 2,3: hw]
+    #input_concatenated = tf.concat((input_img, input_landmarks), axis=1) # [0: batch, 1: channels, 2,3: hw]
 
     with tf.variable_scope('encoder'):
-        with tf.variable_scope('input_image_stage'):
-            net = conv2d(input_concatenated, fmaps=filter, kernel=3, use_wscale=False)
+        with tf.variable_scope('landmark_image_stage'):
+            net = conv2d(input_landmarks, fmaps=filter, kernel=3, use_wscale=False)
             net = leaky_relu(bn(net, phase=phase, name='bn_input_stage'))
 
         for i in range(num_blocks):
-            name_scope = 'encoder_res_block_%d' % (i)
+            name_scope = 'landmark_encoder_res_block_%d' % (i)
             nf1 = min(filter * 2 ** i, filter_max)
             nf2 = min(filter * 2 ** (i + 1), filter_max)
             net = downscale2d(net, factor=2)
             net = residual_block_bn(net, fin=nf1, fout=nf2, phase=phase, scope=name_scope)
 
-        with tf.variable_scope('encoder_fc'):
-            latent_w = dense(net, fmaps=512*num_layers, gain=1, use_wscale=False)
-            latent_w = bn(latent_w, phase=phase, name='fc_1')
-
+        with tf.variable_scope('landmark_encoder_fc'):
+            lm_context = dense(net, fmaps=160, gain=1, use_wscale=False)
+            lm_context = leaky_relu(bn(lm_context, phase=phase, name='bn_landmark_encoder'))
+            lm_context = tf.reshape(lm_context, [batch_size, 1, 160])
+            lm_context = tf.tile(lm_context, [1,12,1])
+        
+        with tf.variable_scope('latent_code_encoder'):
+            w_context = channel_independent_dense(embedded_w, 32, num_layers)
+            w_context = leaky_relu(bn(w_context, phase=phase, name='bn_latent_code_encoder'))
+            
+        concatenated_context = tf.concat((w_context, lm_context), axis=2)
+        
+        with tf.variable_scope('decoder'):
+            latent_modifier = channel_independent_dense(concatenated_context, 512, num_layers)
+            latent_modifier = bn(latent_modifier, phase=phase, name='bn_decoder')
+        
+        latent_w = tf.math.add(embedded_w, latent_modifier)
+        
         return latent_w

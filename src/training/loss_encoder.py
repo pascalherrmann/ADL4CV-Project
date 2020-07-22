@@ -14,58 +14,116 @@ def fp32(*values):
     values = tuple(tf.cast(v, tf.float32) for v in values)
     return values if len(values) >= 2 else values[0]
 
+def feedthrough(input_value):
+    return input_value
+
+def appearance_training(E, G, D, Inv, perceptual_model, real_portraits, shuffled_portraits, real_landmarks, shuffled_landmarks, training_flag, feature_scale=0.00005, D_scale=0.1, perceptual_img_size=256):
+    num_layers, latent_dim = G.components.synthesis.input_shape[1:3]
+    embedded_w = Inv.get_output_for(real_portraits, phase=True)
+    embedded_w_tensor = tf.reshape(embedded_w, [real_portraits.shape[0], num_layers, latent_dim])
+    
+    latent_w = E.get_output_for(embedded_w_tensor, real_landmarks, phase=True)
+    latent_wp = tf.reshape(latent_w, [real_portraits.shape[0], num_layers, latent_dim])
+    fake_X = G.components.synthesis.get_output_for(latent_wp, randomize_noise=False)
+    fake_scores_out = fp32(D.get_output_for(fake_X, real_landmarks, None))
+    
+    with tf.variable_scope('recon_loss_appearance'):
+        recon_loss = tf.reduce_mean(tf.square(latent_wp - embedded_w_tensor))
+        recon_loss = autosummary('Loss/scores/recon_loss_appearance', recon_loss)
+
+    with tf.variable_scope('adv_loss_appearance'):
+        adv_loss = tf.reduce_mean(tf.nn.softplus(-fake_scores_out))
+        adv_loss = autosummary('Loss/scores/adv_loss_appearance', adv_loss)
+
+    loss = adv_loss * D_scale  + recon_loss
+
+    return loss, recon_loss, adv_loss
+
+def pose_training(E, G, D, Inv, perceptual_model, real_portraits, shuffled_portraits, real_landmarks, shuffled_landmarks, training_flag, feature_scale=0.00005, D_scale=0.1, perceptual_img_size=256):
+    '''
+    # CYCLE CONSISTENCY
+    * 1: Feed Original Portrait + SHUFFLED Landmark into Encoder -> Get W for "Manipulated Image"
+    * 2: Feed Manipulated Image + SHUFFLED Landmark into Cond. Discriminator -> Fake scores manpulated
+    * 3: Then: Feed Manipulated Image + Original Landmark into Encoder -> Get W for "Reconstructed Image"
+    * 4: Feed "Reconstructed Image" + ORIGINAL Landmark into Cond. Discriminator -> reconstructed image
+    * 5: + Take Reconsturction & Perceptual Loss between Reconstructed & Original Image
+
+
+    Davor haben wir immer shuffled portraits übergeben. Jetzt brauchen wir aber: Shuffled Landmarks....
+    '''
+    num_layers, latent_dim = G.components.synthesis.input_shape[1:3]
+    embedded_w = Inv.get_output_for(real_portraits, phase=True)
+    embedded_w_tensor = tf.reshape(embedded_w, [real_portraits.shape[0], num_layers, latent_dim])
+    # 1
+    w_manipulated = E.get_output_for(embedded_w_tensor, shuffled_landmarks, phase=True)
+    w_manipulated_tensor = tf.reshape(w_manipulated, [real_portraits.shape[0], num_layers, latent_dim])
+    img_manipulated = G.components.synthesis.get_output_for(w_manipulated_tensor, randomize_noise=False)
+
+    # 2
+    manipulated_fake_scores_out = fp32(D.get_output_for(img_manipulated, shuffled_landmarks, None))
+
+    # 3
+    w_reconstructed = E.get_output_for(w_manipulated_tensor, real_landmarks, phase=True)
+    w_reconstructed_tensor = tf.reshape(w_reconstructed, [real_portraits.shape[0], num_layers, latent_dim])
+    img_reconstructed = G.components.synthesis.get_output_for(w_reconstructed_tensor, randomize_noise=False)
+
+    # 4
+    reconstructed_fake_scores_out = fp32(D.get_output_for(img_reconstructed, real_landmarks, None))
+
+    # 5
+    with tf.variable_scope('recon_loss_pose'):
+        recon_loss = tf.reduce_mean(tf.square(w_reconstructed_tensor - embedded_w_tensor))
+        recon_loss = autosummary('Loss/scores/recon_loss_pose', recon_loss)
+
+    with tf.variable_scope('adv_loss_pose'):
+        adv_loss_manipulated = tf.reduce_mean(tf.nn.softplus(-manipulated_fake_scores_out))
+        adv_loss_manipulated = autosummary('Loss/scores/adv_loss_pose_manipulated', adv_loss_manipulated)
+        
+        adv_loss_reconstructed = tf.reduce_mean(tf.nn.softplus(-reconstructed_fake_scores_out))
+        adv_loss_reconstructed = autosummary('Loss/scores/adv_loss_pose_reconstructed', adv_loss_reconstructed)
+
+
+    loss = D_scale * adv_loss_manipulated + D_scale * adv_loss_reconstructed + recon_loss
+
+    return loss, recon_loss, (adv_loss_manipulated + adv_loss_reconstructed)
+
 
 #----------------------------------------------------------------------------
 # Encoder loss function .
-def E_loss(E, G, D, perceptual_model, real_portraits, shuffled_portraits, real_landmarks, feature_scale=0.00005, D_scale=0.1, perceptual_img_size=256):
-    reals = shuffled_portraits
-    num_layers, latent_dim = G.components.synthesis.input_shape[1:3]
-    latent_w = E.get_output_for(reals, real_landmarks, phase=True)
-    latent_wp = tf.reshape(latent_w, [reals.shape[0], num_layers, latent_dim])
-    fake_X = G.components.synthesis.get_output_for(latent_wp, randomize_noise=False)
-    fake_scores_out = fp32(D.get_output_for(fake_X, real_landmarks, None))
+def E_loss(E, G, D, Inv, perceptual_model, real_portraits, shuffled_portraits, real_landmarks, shuffled_landmarks, training_flag, feature_scale=0.00005, D_scale=0.1, perceptual_img_size=256):
 
-    with tf.variable_scope('recon_loss'):
-        vgg16_input_real = tf.transpose(reals, perm=[0, 2, 3, 1])
-        vgg16_input_real = tf.image.resize_images(vgg16_input_real, size=[perceptual_img_size, perceptual_img_size], method=1)
-        vgg16_input_real = ((vgg16_input_real + 1) / 2) * 255
-        vgg16_input_fake = tf.transpose(fake_X, perm=[0, 2, 3, 1])
-        vgg16_input_fake = tf.image.resize_images(vgg16_input_fake, size=[perceptual_img_size, perceptual_img_size], method=1)
-        vgg16_input_fake = ((vgg16_input_fake + 1) / 2) * 255
-        vgg16_feature_real = perceptual_model(vgg16_input_real)
-        vgg16_feature_fake = perceptual_model(vgg16_input_fake)
-        recon_loss_feats = feature_scale * tf.reduce_mean(tf.square(vgg16_feature_real - vgg16_feature_fake))
-        recon_loss_pixel = tf.reduce_mean(tf.square(fake_X - reals))
-        recon_loss_feats = autosummary('Loss/scores/loss_feats', recon_loss_feats)
-        recon_loss_pixel = autosummary('Loss/scores/loss_pixel', recon_loss_pixel)
-        recon_loss = recon_loss_feats + recon_loss_pixel
-        recon_loss = autosummary('Loss/scores/recon_loss', recon_loss)
+    with tf.device("/cpu:0"):
+        appearance_flag = tf.math.equal(training_flag, "appearance")
 
-    with tf.variable_scope('adv_loss'):
-        #D_scale = autosummary('Loss/scores/d_scale', D_scale)
-        adv_loss = tf.reduce_mean(tf.nn.softplus(-fake_scores_out))# * D_scale
-        adv_loss = autosummary('Loss/scores/adv_loss', adv_loss)
-
-    loss = adv_loss # + recon_loss
+    loss, recon_loss, adv_loss = tf.cond(appearance_flag, lambda: appearance_training(E, G, D, Inv, perceptual_model, real_portraits, shuffled_portraits, real_landmarks, shuffled_landmarks, training_flag, feature_scale, D_scale, perceptual_img_size), lambda: pose_training(E, G, D, Inv, perceptual_model, real_portraits, shuffled_portraits, real_landmarks, shuffled_landmarks, training_flag, feature_scale, D_scale, perceptual_img_size))
 
     return loss, recon_loss, adv_loss
 
 #----------------------------------------------------------------------------
 # Discriminator loss function.
-def D_logistic_simplegp(E, G, D, real_portraits, shuffled_portraits, real_landmarks, r1_gamma=10.0):
+def D_logistic_simplegp(E, G, D, Inv, real_portraits, shuffled_portraits, real_landmarks, training_flag, r1_gamma=10.0):
 
+    with tf.device("/cpu:0"):
+        appearance_flag = tf.math.equal(training_flag, "appearance")
+    
+    portraits = tf.cond(appearance_flag, lambda: feedthrough(real_portraits), lambda: feedthrough(shuffled_portraits))
+        
     num_layers, latent_dim = G.components.synthesis.input_shape[1:3]
-    latent_w = E.get_output_for(shuffled_portraits, real_landmarks, phase=True)
-    latent_wp = tf.reshape(latent_w, [shuffled_portraits.shape[0], num_layers, latent_dim]) # make synthetic from shuffled ones!
+    embedded_w = Inv.get_output_for(portraits, phase=True)
+    embedded_w_tensor = tf.reshape(embedded_w, [portraits.shape[0], num_layers, latent_dim])
+    
+    latent_w = E.get_output_for(embedded_w_tensor, real_landmarks, phase=True)
+    latent_wp = tf.reshape(latent_w, [portraits.shape[0], num_layers, latent_dim]) # make synthetic from shuffled ones!
     fake_X = G.components.synthesis.get_output_for(latent_wp, randomize_noise=False)
     real_scores_out = fp32(D.get_output_for(real_portraits, real_landmarks, None)) # real portraits, real landmarks
     fake_scores_out = fp32(D.get_output_for(fake_X, real_landmarks, None)) # synthetic portaits, real landmarks
 
     real_scores_out = autosummary('Loss/scores/real', real_scores_out)
     fake_scores_out = autosummary('Loss/scores/fake', fake_scores_out)
+    
     loss_fake = tf.reduce_mean(tf.nn.softplus(fake_scores_out))
     loss_real = tf.reduce_mean(tf.nn.softplus(-real_scores_out))
-
+    
     loss_fake = autosummary('Loss/scores/loss_fake', loss_fake)
     loss_real = autosummary('Loss/scores/loss_real', loss_real)
 
@@ -74,5 +132,6 @@ def D_logistic_simplegp(E, G, D, real_portraits, shuffled_portraits, real_landma
         r1_penalty = tf.reduce_mean(tf.reduce_sum(tf.square(real_grads), axis=[1, 2, 3]))
         r1_penalty = autosummary('Loss/r1_penalty', r1_penalty)
         loss_gp = r1_penalty * (r1_gamma * 0.5)
+
     loss = loss_fake + loss_real + loss_gp
     return loss, loss_fake, loss_real, loss_gp

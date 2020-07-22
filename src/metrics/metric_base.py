@@ -18,18 +18,24 @@ import dnnlib.tflib as tflib
 import config
 from training import misc
 from training import dataset
+from metrics.util import convert_pickle_path_to_name, create_dir, write_to_file
+
 
 #----------------------------------------------------------------------------
 # Standard metrics.
 
-fid50k = dnnlib.EasyDict(func_name='metrics.frechet_inception_distance.FID', name='fid50k', num_images=50000, minibatch_per_gpu=8)
+fid50k = dnnlib.EasyDict(func_name='metrics.frechet_inception_distance.FID', name='fid50k', num_images=4000, minibatch_per_gpu=16)
 ppl_zfull = dnnlib.EasyDict(func_name='metrics.perceptual_path_length.PPL', name='ppl_zfull', num_samples=100000, epsilon=1e-4, space='z', sampling='full', minibatch_per_gpu=16)
 ppl_wfull = dnnlib.EasyDict(func_name='metrics.perceptual_path_length.PPL', name='ppl_wfull', num_samples=100000, epsilon=1e-4, space='w', sampling='full', minibatch_per_gpu=16)
 ppl_zend = dnnlib.EasyDict(func_name='metrics.perceptual_path_length.PPL', name='ppl_zend', num_samples=100000, epsilon=1e-4, space='z', sampling='end', minibatch_per_gpu=16)
 ppl_wend = dnnlib.EasyDict(func_name='metrics.perceptual_path_length.PPL', name='ppl_wend', num_samples=100000, epsilon=1e-4, space='w', sampling='end', minibatch_per_gpu=16)
 ls = dnnlib.EasyDict(func_name='metrics.linear_separability.LS', name='ls', num_samples=200000, num_keep=100000, attrib_indices=range(40), minibatch_per_gpu=4)
-lm_hd = dnnlib.EasyDict(func_name='metrics.landmark_hausdorff.LMHausdorff', name='lm_hd', num_images=50000, minibatch_per_gpu=16)
+
+lm_hd = dnnlib.EasyDict(func_name='metrics.landmark_hausdorff.LMHausdorff', name='lm_hd', num_images=4000, minibatch_per_gpu=16)
+csim = dnnlib.EasyDict(func_name='metrics.appearance_cosine_similarity.CSIM', name='csim', num_images=4000, minibatch_per_gpu=16)
+gallery = dnnlib.EasyDict(func_name="metrics.qualitative.Gallery", name="gallery", img_folder="/content/ADL4CV-Project/src/ADL4CV-Project/evaluation/data/PRESENTATION_IMG", lm_folder="/content/ADL4CV-Project/src/ADL4CV-Project/evaluation/data/PRESENTATION_LM", kp_folder="/content/ADL4CV-Project/src/ADL4CV-Project/evaluation/data/PRESENTATION_KP", minibatch_per_gpu=16)
 dummy = dnnlib.EasyDict(func_name='metrics.metric_base.DummyMetric', name='dummy') # for debugging
+
 
 #----------------------------------------------------------------------------
 # Base class for metrics.
@@ -42,12 +48,17 @@ class MetricBase:
         self._mirror_augment = None
         self._results = []
         self._eval_time = None
+        self.model_type = "rignet"
 
-    def run(self, network_pkl, run_dir=None, dataset_args=None, mirror_augment=None, num_gpus=1, tf_config=None, log_results=True):
+    def run(self, network_pkl, run_dir=None, dataset_args=None, mirror_augment=None, num_gpus=1, tf_config=None, log_results=True, model_type = "rignet"):
+
+        create_dir(config.EVALUATION_DIR, exist_ok=True)
+
         self._network_pkl = network_pkl
         self._dataset_args = dataset_args
         self._mirror_augment = mirror_augment
         self._results = []
+        self.model_type = model_type
 
         if (dataset_args is None or mirror_augment is None) and run_dir is not None:
             run_config = misc.parse_config_for_previous_run(run_dir)
@@ -57,8 +68,11 @@ class MetricBase:
 
         time_begin = time.time()
         with tf.Graph().as_default(), tflib.create_session(tf_config).as_default(): # pylint: disable=not-context-manager
-            _G, _D, Gs = misc.load_pkl(self._network_pkl)
-            self._evaluate(Gs, num_gpus=num_gpus)
+            E, _G, _D, Gs = misc.load_pkl(self._network_pkl)
+            print("Loaded Encoder")
+            Inv, _, _, _  = misc.load_pkl(config.INVERSION_PICKLE_DIR)
+            print("Loaded Inv")
+            self._evaluate(Gs, E, Inv, num_gpus=num_gpus)
         self._eval_time = time.time() - time_begin
 
         if log_results:
@@ -69,6 +83,9 @@ class MetricBase:
                     print(result_str)
             else:
                 print(result_str)
+
+            result_path = os.path.join(config.EVALUATION_DIR, "result_" + convert_pickle_path_to_name(self._network_pkl) + ".txt")
+            write_to_file(result_str + "\n\n\n", result_path)
 
     def get_result_str(self):
         network_name = os.path.splitext(os.path.basename(self._network_pkl))[0]
@@ -85,7 +102,7 @@ class MetricBase:
         for res in self._results:
             tflib.autosummary.autosummary('Metrics/' + self.name + res.suffix, res.value)
 
-    def _evaluate(self, Gs, num_gpus):
+    def _evaluate(self, Gs, E, Inv, num_gpus):
         raise NotImplementedError # to be overridden by subclasses
 
     def _report_result(self, value, suffix='', fmt='%-10.4f'):
@@ -136,7 +153,7 @@ class MetricGroup:
 # Dummy metric for debugging purposes.
 
 class DummyMetric(MetricBase):
-    def _evaluate(self, Gs, num_gpus):
+    def _evaluate(self, Gs, E, Inv, num_gpus):
         _ = Gs, num_gpus
         self._report_result(0.0)
 

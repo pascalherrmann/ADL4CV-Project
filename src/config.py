@@ -25,7 +25,9 @@ DESC = ""
 
 DATA_DIR = "/content/gdrive/My Drive/Public/tensorboards_shared/split_dataset/train"
 TEST_DATA_DIR = "/content/gdrive/My Drive/Public/tensorboards_shared/split_dataset/test/dataset_tfrecords0-r07.tfrecords"
+EVAL_DATA_DIR = "/content/gdrive/My Drive/Public/tensorboards_shared/split_dataset_128/test"
 PICKLE_DIR = "/content/gdrive/My Drive/Public/tensorboards_shared/Training_Decoder_TF/00000-sgan-ffhq128-1gpu/network-snapshot-011489.pkl"
+INVERSION_PICKLE_DIR = "/content/gdrive/My Drive/Public/tensorboards_shared/Training_Encoder_X/128_Standard/snapshots/network-snapshot-02340288.pkl"
 
 ENCODER_PICKLE_DIR = None
 # Encoder
@@ -34,6 +36,12 @@ GDRIVE_PATH = "/content/gdrive/My Drive/Public/tensorboards_shared"
 # only for decoder
 TIME = 0
 KIMG = 0
+
+# metrics
+INCEPTION_PICKLE_DIR = "/content/gdrive/My Drive/Public/tensorboards_shared/inception_v3_features.pkl"
+FACENET_PB_DIR = "/content/gdrive/My Drive/Public/tensorboards_shared/facenet_model/facenet.pb"
+
+EVALUATION_DIR = "/content/gdrive/My Drive/Public/tensorboards_shared/EVAL"
 
 # =======================
 # End of Configuration
