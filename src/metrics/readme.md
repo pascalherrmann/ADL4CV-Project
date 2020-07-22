@@ -5,9 +5,8 @@
 ##### Clone Repository
 
 ```python
-!git clone https://adl4cv:GitHub111!@github.com/pascalherrmann/ADL4CV-Project
+!git clone https://github.com/pascalherrmann/ADL4CV-Project
 %cd /content/ADL4CV-Project/src
-!git checkout run/p/27_metrics
 ```
 
 ##### Import TensorFlow, Mount gDrive
@@ -40,8 +39,8 @@ from metrics import metric_base
 
 ```python
 model_path = "/content/gdrive/My Drive/Public/tensorboards_shared/run/t/58_rignet_fixed_pose_only_larger_adv_scaling/snapshots/network-snapshot-01040128.pkl"
-dataset_args = EasyDict(tfrecord_dir=config.DATA_DIR, resolution = config.RESOLUTION)
-metrics = metric_base.MetricGroup([metric_base.fid50k])
+dataset_args = EasyDict(tfrecord_dir=config.TEST_DATA_DIR, resolution = config.RESOLUTION)
+metrics = metric_base.MetricGroup([metric_base.lm_hd, metric_base.cism, metric_base.fid50k, metric_base.gallery])
 
-metrics.run(model_path, num_gpus=1, dataset_args=dataset_args)#run_dir=submit_config.run_dir,  tf_config=tf_config)
+metrics.run(model_path, num_gpus=1, dataset_args=dataset_args)
 ```

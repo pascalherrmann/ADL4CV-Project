@@ -47,9 +47,6 @@ def pose_training(E, G, D, Inv, perceptual_model, real_portraits, shuffled_portr
     * 3: Then: Feed Manipulated Image + Original Landmark into Encoder -> Get W for "Reconstructed Image"
     * 4: Feed "Reconstructed Image" + ORIGINAL Landmark into Cond. Discriminator -> reconstructed image
     * 5: + Take Reconsturction & Perceptual Loss between Reconstructed & Original Image
-
-
-    Davor haben wir immer shuffled portraits übergeben. Jetzt brauchen wir aber: Shuffled Landmarks....
     '''
     num_layers, latent_dim = G.components.synthesis.input_shape[1:3]
     embedded_w = Inv.get_output_for(real_portraits, phase=True)

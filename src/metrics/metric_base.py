@@ -33,7 +33,7 @@ ls = dnnlib.EasyDict(func_name='metrics.linear_separability.LS', name='ls', num_
 
 lm_hd = dnnlib.EasyDict(func_name='metrics.landmark_hausdorff.LMHausdorff', name='lm_hd', num_images=4000, minibatch_per_gpu=16)
 csim = dnnlib.EasyDict(func_name='metrics.appearance_cosine_similarity.CSIM', name='csim', num_images=4000, minibatch_per_gpu=16)
-gallery = dnnlib.EasyDict(func_name="metrics.qualitative.Gallery", name="gallery", img_folder="/content/ADL4CV-Project/src/ADL4CV-Project/evaluation/data/PRESENTATION_IMG", lm_folder="/content/ADL4CV-Project/src/ADL4CV-Project/evaluation/data/PRESENTATION_LM", kp_folder="/content/ADL4CV-Project/src/ADL4CV-Project/evaluation/data/PRESENTATION_KP", minibatch_per_gpu=16)
+gallery = dnnlib.EasyDict(func_name="metrics.qualitative.Gallery", name="gallery", img_folder="../resources/debug_data/PRESENTATION_IMG", lm_folder="/resources/debug_data/PRESENTATION_LM", kp_folder="/resources/debug_data/PRESENTATION_KP", minibatch_per_gpu=16)
 dummy = dnnlib.EasyDict(func_name='metrics.metric_base.DummyMetric', name='dummy') # for debugging
 
 
