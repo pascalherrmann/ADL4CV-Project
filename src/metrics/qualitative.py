@@ -52,7 +52,7 @@ def load_keypoint_vectors(dir):
         KP = np.loadtxt(kp_path, delimiter=',')
         kps.append(KP)
 
-    return imgs
+    return kps
 
 #----------------------------------------------------------------------------
 #----------------------------------------------------------------------------
@@ -129,7 +129,7 @@ class Gallery(metric_base.MetricBase):
                 for i, image in enumerate(batch):
                     batch_images[i] = np.transpose(image, [2, 0, 1])
                     batch_lms[i] = np.transpose(lm, [2, 0, 1])
-                    batch_kps[i] = kp
+                    batch_kps[i] = kp.flatten()
 
                 inputs = batch_images.astype(np.float32) / 255 * 2.0 - 1.0
                 inputs_lm = batch_lms.astype(np.float32) / 255 * 2.0 - 1.0
@@ -150,9 +150,11 @@ class Gallery(metric_base.MetricBase):
         results = [header]
         print("rsultss", len(results))
         print("resuls[0]", len(results[0]))
-        for idx, sample_landmark in loaded_landmarks:
+        idx = 0
+        for sample_landmark in loaded_landmarks:
             current_result = get_landmark_row(sample_landmark, loaded_keypoints[idx], loaded_imgs)
             results.append(current_result)
+            idx += 1
 
 
 
