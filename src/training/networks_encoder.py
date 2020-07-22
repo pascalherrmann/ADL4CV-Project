@@ -1,3 +1,7 @@
+#References
+#Encoder model inspired by:
+#https://gvv.mpi-inf.mpg.de/projects/StyleRig/
+
 import tensorflow as tf
 import numpy as np
 
