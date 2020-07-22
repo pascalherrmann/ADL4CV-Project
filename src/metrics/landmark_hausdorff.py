@@ -123,7 +123,7 @@ class LMHausdorff(metric_base.MetricBase):
         hd_sum = 0.0
         failed_counter = 0
         
-        for idx, data in tqdm(enumerate(self._iterate_reals(minibatch_size=minibatch_size))):
+        for idx, data in tqdm(enumerate(self._iterate_reals(minibatch_size=minibatch_size)), position=0, leave=True):
             image_data = data[0]
             batch_portraits = image_data[:,0,:,:,:]
             batch_landmarks = np.roll(image_data[:,1,:,:,:], shift=1, axis=0)
@@ -151,7 +151,7 @@ class LMHausdorff(metric_base.MetricBase):
                   hd_sum += self.calculate_landmark_hausdorff(ground_truth_lm, generated_lm)
                 
                 except Exception as e:
-                  print('Error: Landmark couldnt be extracted from generated output. Skipping the sample')
+                  #print('Error: Landmark couldnt be extracted from generated output. Skipping the sample')
                   failed_counter += 1
                   continue
                 

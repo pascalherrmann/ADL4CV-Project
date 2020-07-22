@@ -94,7 +94,7 @@ class CSIM(metric_base.MetricBase):
         
         csim_sum = 0.0
         
-        for idx, data in tqdm(enumerate(self._iterate_reals(minibatch_size=minibatch_size))):
+        for idx, data in tqdm(enumerate(self._iterate_reals(minibatch_size=minibatch_size)), position=0, leave=True):
             image_data = data[0]
             batch_portraits = image_data[:,0,:,:,:]
             batch_landmarks = np.roll(image_data[:,1,:,:,:], shift=1, axis=0)
