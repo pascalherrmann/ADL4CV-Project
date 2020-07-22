@@ -18,6 +18,7 @@ from training import misc
 
 import scipy
 from tensorflow.python.platform import gfile
+from tqdm import tqdm
 
 #----------------------------------------------------------------------------
 
@@ -93,7 +94,7 @@ class CSIM(metric_base.MetricBase):
         
         csim_sum = 0.0
         
-        for idx, data in enumerate(self._iterate_reals(minibatch_size=minibatch_size)):
+        for idx, data in tqdm(enumerate(self._iterate_reals(minibatch_size=minibatch_size))):
             image_data = data[0]
             batch_portraits = image_data[:,0,:,:,:]
             batch_landmarks = np.roll(image_data[:,1,:,:,:], shift=1, axis=0)
@@ -105,7 +106,7 @@ class CSIM(metric_base.MetricBase):
 
             begin = idx * minibatch_size
             end = min(begin + minibatch_size, self.num_images)
-            samples_manipulated = tflib.run(fake_X_val, feed_dict={placeholder_portraits: batch_portraits, placeholder_landmarks: batch_landmarks, placeholder_keypoints: keypoints})
+            samples_manipulated = tflib.run(fake_X_val, feed_dict={placeholder_portraits: batch_portraits, placeholder_landmarks: batch_landmarks})
             
             samples_manipulated = np.transpose(samples_manipulated, [0, 2, 3, 1])
             samples_manipulated = np.pad(samples_manipulated, ((0, 0), (11, 11), (11, 11), (0, 0)), mode='constant')

@@ -18,7 +18,7 @@ class FaceLandmarkExtractor:
         try:
             return self.face_aligner.get_landmarks_from_image(source_path_or_image)[0]
         except:
-            print('Error: couldnt extract landmarks')
+            #print('Error: couldnt extract landmarks')
             return None
     
     def generate_landmark_image(self, source_path_or_image, output_image_path='', keypoint_csv_dir='', resolution=128):
@@ -69,8 +69,8 @@ class FaceLandmarkExtractor:
             
             plt.close(fig)
         except Exception as e:
-            print('Error: Image corrupted or no landmarks visible')
-            print(e)
+            #print('Error: Image corrupted or no landmarks visible')
+            #print(e)
             plt.close(fig)
             return None
         

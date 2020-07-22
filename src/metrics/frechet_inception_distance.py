@@ -177,7 +177,7 @@ class FID(metric_base.MetricBase):
             begin = idx * minibatch_size
             end = min(begin + minibatch_size, self.num_images) # begin: 0; end: 8
 
-            activations[begin:end], manip  = tflib.run([inception_codes, manipulated_images], feed_dict={x:images, x_lm:landmarks, x_kp:keypoints})
+            activations[begin:end], manip  = tflib.run([inception_codes, manipulated_images], feed_dict={x:images, x_lm:landmarks})
             # acivations: (5000, 2048)
 
 
@@ -262,7 +262,7 @@ class FID(metric_base.MetricBase):
             begin = idx * minibatch_size
             end = min(begin + minibatch_size, self.num_images) # begin: 0; end: 8
 
-            activations[begin:end], manip  = tflib.run([inception_codes, manipulated_images], feed_dict={x:images, x_lm:landmarks, x_kp:keypoints})
+            activations[begin:end], manip  = tflib.run([inception_codes, manipulated_images], feed_dict={x:images, x_lm:landmarks})
             # acivations: (5000, 2048)
 
 
